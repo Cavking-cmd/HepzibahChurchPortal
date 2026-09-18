@@ -123,7 +123,7 @@ using (var scope = app.Services.CreateScope())
     await UserSeeder.SeedAsync(context);
 }
 
-if (app.Environment.IsDevelopment())
+if (!app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
