@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/node_modules/
+.vs/
+.git/
+.gitignore
+church-portal-web/
+Front-End/
+*.user
+Dockerfile
+.dockerignore
