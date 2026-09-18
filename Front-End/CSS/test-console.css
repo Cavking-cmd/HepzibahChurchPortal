@@ -1,0 +1,235 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+body {
+    background: #f4f4f4;
+    min-height: 100vh;
+}
+
+header {
+    background: #1f3a93;
+    color: #fff;
+    padding: 18px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+header h1 {
+    font-size: 1.3rem;
+    font-weight: 600;
+}
+
+.api-base-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+}
+
+.api-base-wrap input {
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: none;
+    width: 220px;
+}
+
+main {
+    padding: 24px 32px 60px;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(31, 58, 147, 0.08);
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+.card h2 {
+    margin-bottom: 14px;
+    font-size: 1.1rem;
+    color: #1f3a93;
+}
+
+.card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.card-header-row h2 {
+    margin-bottom: 0;
+}
+
+.auth-status {
+    background: #f4f4f4;
+    padding: 10px 14px;
+    border-radius: 6px;
+    margin-bottom: 14px;
+    font-size: 0.9rem;
+    word-break: break-all;
+}
+
+.auth-status.logged-in {
+    background: #eafaf1;
+    color: #196f3d;
+}
+
+.inline-form {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.inline-form input {
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    flex: 1;
+    min-width: 180px;
+}
+
+.grid-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px 18px;
+    align-items: end;
+}
+
+.grid-form label {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.85rem;
+    color: #444;
+    gap: 4px;
+}
+
+.grid-form input,
+.grid-form select {
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 0.9rem;
+}
+
+button {
+    background: #1f3a93;
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 5px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #16295e;
+}
+
+#logout-btn {
+    background: #7f8c8d;
+}
+
+#logout-btn:hover {
+    background: #626e6f;
+}
+
+.refresh-btn {
+    background: #27ae60;
+}
+
+.refresh-btn:hover {
+    background: #1e8449;
+}
+
+.tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.tab-btn {
+    background: #e5e9f5;
+    color: #1f3a93;
+}
+
+.tab-btn.active {
+    background: #1f3a93;
+    color: #fff;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+    white-space: nowrap;
+}
+
+th {
+    background: #f4f4f4;
+    color: #1f3a93;
+}
+
+.row-btn {
+    padding: 5px 10px;
+    font-size: 0.78rem;
+    margin-right: 4px;
+}
+
+.row-btn.approve {
+    background: #27ae60;
+}
+
+.row-btn.approve:hover {
+    background: #1e8449;
+}
+
+.row-btn.delete {
+    background: #c0392b;
+}
+
+.row-btn.delete:hover {
+    background: #922b21;
+}
+
+#log-output {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 16px;
+    border-radius: 6px;
+    max-height: 320px;
+    overflow: auto;
+    font-size: 0.8rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

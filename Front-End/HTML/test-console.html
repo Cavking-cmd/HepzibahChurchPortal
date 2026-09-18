@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChurchPortal API Test Console</title>
+    <link rel="stylesheet" href="../CSS/test-console.css">
+</head>
+<body>
+    <header>
+        <h1>ChurchPortal API Test Console</h1>
+        <div class="api-base-wrap">
+            <label for="api-base">API base URL</label>
+            <input type="text" id="api-base" value="http://localhost:5080">
+        </div>
+    </header>
+
+    <main>
+        <section class="card" id="auth-card">
+            <h2>1. Authentication</h2>
+            <div class="auth-status" id="auth-status">Not logged in.</div>
+            <form id="login-form" class="inline-form">
+                <input type="email" id="login-email" placeholder="Email" value="admin@churchportal.local" required>
+                <input type="password" id="login-password" placeholder="Password" value="Admin@123" required>
+                <button type="submit">Login</button>
+                <button type="button" id="logout-btn">Logout</button>
+            </form>
+        </section>
+
+        <nav class="tabs" id="tabs">
+            <button class="tab-btn active" data-tab="services">Services</button>
+            <button class="tab-btn" data-tab="attendance">Attendance</button>
+            <button class="tab-btn" data-tab="fellowship-centers">Fellowship Centers</button>
+            <button class="tab-btn" data-tab="fellowship-attendance">Fellowship Attendance</button>
+            <button class="tab-btn" data-tab="inventory">Inventory</button>
+        </nav>
+
+        <section class="tab-panel active" id="tab-services">
+            <div class="card">
+                <h2>Create Service</h2>
+                <form id="service-form" class="grid-form">
+                    <label>Date <input type="date" name="date" required></label>
+                    <label>Day <input type="text" name="day" placeholder="Sunday" required></label>
+                    <label>Service Type
+                        <select name="serviceType">
+                            <option value="0">Sunday</option>
+                            <option value="1">Wednesday</option>
+                            <option value="2">Special</option>
+                        </select>
+                    </label>
+                    <label>Theme <input type="text" name="theme"></label>
+                    <label>Scripture Text <input type="text" name="scriptureText"></label>
+                    <label>Preacher <input type="text" name="preacher"></label>
+                    <label>Online Attendance <input type="number" name="onlineAttendance" value="0" min="0"></label>
+                    <button type="submit">Create Service</button>
+                </form>
+            </div>
+            <div class="card">
+                <div class="card-header-row">
+                    <h2>All Services</h2>
+                    <button type="button" class="refresh-btn" data-refresh="services">Refresh</button>
+                </div>
+                <div class="table-wrap"><table id="services-table"><thead></thead><tbody></tbody></table></div>
+            </div>
+        </section>
+
+        <section class="tab-panel" id="tab-attendance">
+            <div class="card">
+                <h2>Create Attendance Record</h2>
+                <form id="attendance-form" class="grid-form">
+                    <label>Service
+                        <select name="serviceId" id="attendance-service-select" required></select>
+                    </label>
+                    <label>Men <input type="number" name="men" value="0" min="0"></label>
+                    <label>Women <input type="number" name="women" value="0" min="0"></label>
+                    <label>Children <input type="number" name="children" value="0" min="0"></label>
+                    <label>Sunday School <input type="number" name="sundaySchool" value="0" min="0"></label>
+                    <label>New Converts <input type="number" name="newConverts" value="0" min="0"></label>
+                    <label>First Timers <input type="number" name="firstTimers" value="0" min="0"></label>
+                    <button type="submit">Create Attendance</button>
+                </form>
+            </div>
+            <div class="card">
+                <div class="card-header-row">
+                    <h2>All Attendance Records</h2>
+                    <button type="button" class="refresh-btn" data-refresh="attendance">Refresh</button>
+                </div>
+                <div class="table-wrap"><table id="attendance-table"><thead></thead><tbody></tbody></table></div>
+            </div>
+        </section>
+
+        <section class="tab-panel" id="tab-fellowship-centers">
+            <div class="card">
+                <h2>Create Fellowship Center</h2>
+                <form id="fellowship-center-form" class="grid-form">
+                    <label>Center Name <input type="text" name="centerName" required></label>
+                    <label>Zone <input type="text" name="zone" required></label>
+                    <label>Leader Name <input type="text" name="leaderName" required></label>
+                    <label>Location <input type="text" name="location" required></label>
+                    <button type="submit">Create Center</button>
+                </form>
+            </div>
+            <div class="card">
+                <div class="card-header-row">
+                    <h2>All Fellowship Centers</h2>
+                    <button type="button" class="refresh-btn" data-refresh="fellowship-centers">Refresh</button>
+                </div>
+                <div class="table-wrap"><table id="fellowship-centers-table"><thead></thead><tbody></tbody></table></div>
+            </div>
+        </section>
+
+        <section class="tab-panel" id="tab-fellowship-attendance">
+            <div class="card">
+                <h2>Create Fellowship Attendance</h2>
+                <form id="fellowship-attendance-form" class="grid-form">
+                    <label>Fellowship Center
+                        <select name="fellowshipCenterId" id="fellowship-attendance-center-select" required></select>
+                    </label>
+                    <label>Date <input type="date" name="date" required></label>
+                    <label>Men <input type="number" name="men" value="0" min="0"></label>
+                    <label>Women <input type="number" name="women" value="0" min="0"></label>
+                    <label>Children <input type="number" name="children" value="0" min="0"></label>
+                    <label>New Converts <input type="number" name="newConverts" value="0" min="0"></label>
+                    <button type="submit">Create Record</button>
+                </form>
+            </div>
+            <div class="card">
+                <div class="card-header-row">
+                    <h2>All Fellowship Attendance Records</h2>
+                    <button type="button" class="refresh-btn" data-refresh="fellowship-attendance">Refresh</button>
+                </div>
+                <div class="table-wrap"><table id="fellowship-attendance-table"><thead></thead><tbody></tbody></table></div>
+            </div>
+        </section>
+
+        <section class="tab-panel" id="tab-inventory">
+            <div class="card">
+                <h2>Create Inventory Item</h2>
+                <form id="inventory-form" class="grid-form">
+                    <label>Item Name <input type="text" name="itemName" required></label>
+                    <label>Category <input type="text" name="category" placeholder="Sound, Furniture, Media..." required></label>
+                    <label>Quantity <input type="number" name="quantity" value="1" min="0"></label>
+                    <label>Location <input type="text" name="location" required></label>
+                    <label>Condition
+                        <select name="condition">
+                            <option value="0">Good</option>
+                            <option value="1">NeedsRepair</option>
+                            <option value="2">Replace</option>
+                        </select>
+                    </label>
+                    <label>Purchase Date <input type="date" name="purchaseDate" required></label>
+                    <label>Value <input type="number" step="0.01" name="value" value="0" min="0"></label>
+                    <label>Custodian <input type="text" name="custodian" required></label>
+                    <label>Last Verified Date <input type="date" name="lastVerifiedDate"></label>
+                    <button type="submit">Create Item</button>
+                </form>
+            </div>
+            <div class="card">
+                <div class="card-header-row">
+                    <h2>All Inventory Items</h2>
+                    <button type="button" class="refresh-btn" data-refresh="inventory">Refresh</button>
+                </div>
+                <div class="table-wrap"><table id="inventory-table"><thead></thead><tbody></tbody></table></div>
+            </div>
+        </section>
+
+        <section class="card" id="log-card">
+            <h2>Raw Request / Response Log</h2>
+            <pre id="log-output">No requests yet.</pre>
+        </section>
+    </main>
+
+    <script src="../JS/test-console.js"></script>
+</body>
+</html>

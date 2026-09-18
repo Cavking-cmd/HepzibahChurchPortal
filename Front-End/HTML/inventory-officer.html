@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Officer Dashboard - ChurchPortal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="../CSS/dashboard.css">
+</head>
+<body class="bg-gray-50 dark:bg-gray-900" data-required-role="InventoryOfficer">
+
+<nav class="fixed top-0 z-40 w-full bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+    <div class="px-3 py-3 lg:px-5 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <button data-drawer-target="sidebar" data-drawer-toggle="sidebar" aria-controls="sidebar" type="button"
+                class="inline-flex items-center p-2 text-sm text-gray-500 rounded-lg lg:hidden hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
+            <a href="inventory-officer.html" class="flex items-center gap-2 ms-1">
+                <div class="w-8 h-8 rounded-lg bg-blue-700 text-white flex items-center justify-center font-bold text-sm">CP</div>
+                <span class="self-center text-lg font-semibold whitespace-nowrap dark:text-white">ChurchPortal</span>
+            </a>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="text-right hidden sm:block">
+                <p id="topbar-email" class="text-sm font-medium text-gray-900 dark:text-white leading-tight">-</p>
+                <p id="topbar-role" class="text-xs text-gray-500 dark:text-gray-400 leading-tight">-</p>
+            </div>
+            <button id="logout-btn" type="button"
+                class="text-white bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-300 font-medium rounded-lg text-sm px-3 py-2 text-center dark:focus:ring-red-800">
+                Logout
+            </button>
+        </div>
+    </div>
+</nav>
+
+<aside id="sidebar" class="fixed top-0 left-0 z-30 w-64 h-screen pt-20 transition-transform -translate-x-full bg-white border-r border-gray-200 lg:translate-x-0 dark:bg-gray-800 dark:border-gray-700" aria-label="Sidebar">
+    <div class="h-full px-3 pb-4 overflow-y-auto">
+        <ul class="space-y-1 font-medium">
+            <li><a href="#" data-section="inventory" class="sidebar-link active">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                Inventory
+            </a></li>
+        </ul>
+    </div>
+</aside>
+
+<div class="p-4 lg:ms-64 pt-20">
+
+    <section id="section-inventory" class="section-panel active">
+        <div class="flex items-center justify-between mb-4">
+            <h1 class="text-xl font-semibold text-gray-900 dark:text-white">Inventory</h1>
+            <button type="button" onclick="openInventoryModal()"
+                class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-4 py-2 dark:bg-blue-600 dark:hover:bg-blue-700">
+                + Create Item
+            </button>
+        </div>
+        <div class="table-scroll relative shadow-sm rounded-xl border border-gray-100 dark:border-gray-700">
+            <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                    <tr>
+                        <th class="px-4 py-3">Item Name</th>
+                        <th class="px-4 py-3">Category</th>
+                        <th class="px-4 py-3">Qty</th>
+                        <th class="px-4 py-3">Location</th>
+                        <th class="px-4 py-3">Condition</th>
+                        <th class="px-4 py-3">Value</th>
+                        <th class="px-4 py-3">Custodian</th>
+                        <th class="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-tbody"></tbody>
+            </table>
+        </div>
+    </section>
+
+</div>
+
+<div id="inventory-modal" tabindex="-1" aria-hidden="true" class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-[calc(100%-1rem)] max-h-full">
+    <div class="relative p-4 w-full max-w-lg max-h-full">
+        <div class="relative bg-white rounded-lg shadow dark:bg-gray-700">
+            <div class="flex items-center justify-between p-4 md:p-5 border-b rounded-t dark:border-gray-600">
+                <h3 id="inventory-modal-title" class="text-lg font-semibold text-gray-900 dark:text-white">Create Inventory Item</h3>
+                <button type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm w-8 h-8 inline-flex justify-center items-center dark:hover:bg-gray-600 dark:hover:text-white" data-modal-hide="inventory-modal">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 14 14"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1 1l6 6m0 0l6 6M7 7l6-6M7 7l-6 6"/></svg>
+                </button>
+            </div>
+            <form id="inventory-form" class="p-4 md:p-5">
+                <input type="hidden" name="id">
+                <div class="grid gap-4 mb-4 grid-cols-2">
+                    <div class="col-span-2"><label class="block mb-1 text-sm font-medium text-gray-900 dark:text-white">Item Name</label>
+                        <input type="text" name="itemName" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white"></div>
+                    <div><label class="block mb-1 text-sm font-medium text-gray-900 dark:text-white">Category</label>
+                        <input type="text" name="category" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white"></div>
+                    <div><label class="block mb-1 text-sm font-medium text-gray-900 dark:text-white">Quantity</label>
+                        <input type="number" name="quantity" min="0" value="0" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white"></div>
+                    <div><label class="block mb-1 text-sm font-medium text-gray-900 dark:text-white">Location</label>
+                        <input type="text" name="location" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white"></div>
+                    <div><label class="block mb-1 text-sm font-medium text-gray-900 dark:text-white">Condition</label>
+                        <select name="condition" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                            <option value="0">Good</option>
+                            <option value="1">Needs Repair</option>
+                            <option value="2">Replace</option>
+                        </select></div>
+                    <div><label class="block mb-1 text-sm font-medium text-gray-900 dark:text-white">Value</label>
+                        <input type="number" name="value" min="0" step="0.01" value="0" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white"></div>
+                    <div><label class="block mb-1 text-sm font-medium text-gray-900 dark:text-white">Custodian</label>
+                        <input type="text" name="custodian" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white"></div>
+                    <div><label class="block mb-1 text-sm font-medium text-gray-900 dark:text-white">Purchase Date</label>
+                        <input type="date" name="purchaseDate" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white"></div>
+                    <div><label class="block mb-1 text-sm font-medium text-gray-900 dark:text-white">Last Verified Date</label>
+                        <input type="date" name="lastVerifiedDate" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white"></div>
+                </div>
+                <button type="submit" class="text-white inline-flex items-center bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700">Save</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>
+<script src="../JS/api.js"></script>
+<script src="../JS/dashboard.js"></script>
+<script src="../JS/inventory-officer.js"></script>
+</body>
+</html>

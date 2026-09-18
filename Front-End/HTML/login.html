@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChurchPortal Login</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="../CSS/login.css">
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 min-h-screen flex items-center justify-center" style="font-family:'Poppins',sans-serif;">
+
+    <div class="w-full max-w-md p-6">
+        <div class="text-center mb-6">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-blue-700 text-white text-2xl font-bold mb-3">CP</div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">ChurchPortal</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Sign in to continue</p>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 sm:p-8 border border-gray-100 dark:border-gray-700">
+            <form class="login-form space-y-5">
+                <div>
+                    <label for="Email" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Email</label>
+                    <input type="email" id="Email" name="Email" required placeholder="you@church.org"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-600 focus:border-blue-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                </div>
+                <div>
+                    <label for="Password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Password</label>
+                    <input type="password" name="Password" id="Password" required placeholder="••••••••"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-600 focus:border-blue-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                </div>
+                <button type="submit" class="submit-btn w-full text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
+                    Login
+                </button>
+            </form>
+            <p id="message" class="mt-4 text-sm text-center"></p>
+        </div>
+
+        <details class="mt-4 text-xs text-gray-400 dark:text-gray-500 text-center">
+            <summary class="cursor-pointer">API server settings</summary>
+            <div class="mt-2 flex items-center gap-2 justify-center">
+                <input id="api-base-input" type="text" placeholder="http://localhost:5080"
+                    class="bg-gray-50 border border-gray-300 text-gray-700 text-xs rounded-lg p-1.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white w-56">
+                <button id="api-base-save" type="button" class="text-xs bg-gray-200 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1.5">Save</button>
+            </div>
+        </details>
+    </div>
+
+    <script src="../JS/api.js"></script>
+    <script>
+        const apiBaseInput = document.getElementById("api-base-input");
+        apiBaseInput.value = getApiBase();
+        document.getElementById("api-base-save").addEventListener("click", () => {
+            setApiBase(apiBaseInput.value || "http://localhost:5080");
+        });
+    </script>
+    <script src="../JS/login.js"></script>
+</body>
+</html>

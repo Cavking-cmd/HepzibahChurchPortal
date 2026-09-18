@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viewer Dashboard - ChurchPortal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="../CSS/dashboard.css">
+</head>
+<body class="bg-gray-50 dark:bg-gray-900" data-required-role="Viewer">
+
+<nav class="fixed top-0 z-40 w-full bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+    <div class="px-3 py-3 lg:px-5 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <button data-drawer-target="sidebar" data-drawer-toggle="sidebar" aria-controls="sidebar" type="button"
+                class="inline-flex items-center p-2 text-sm text-gray-500 rounded-lg lg:hidden hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
+            <a href="viewer.html" class="flex items-center gap-2 ms-1">
+                <div class="w-8 h-8 rounded-lg bg-blue-700 text-white flex items-center justify-center font-bold text-sm">CP</div>
+                <span class="self-center text-lg font-semibold whitespace-nowrap dark:text-white">ChurchPortal</span>
+            </a>
+        </div>
+        <div class="flex items-center gap-4">
+            <span class="hidden md:inline-flex items-center bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-300">Read-only</span>
+            <div class="text-right hidden sm:block">
+                <p id="topbar-email" class="text-sm font-medium text-gray-900 dark:text-white leading-tight">-</p>
+                <p id="topbar-role" class="text-xs text-gray-500 dark:text-gray-400 leading-tight">-</p>
+            </div>
+            <button id="logout-btn" type="button"
+                class="text-white bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-300 font-medium rounded-lg text-sm px-3 py-2 text-center dark:focus:ring-red-800">
+                Logout
+            </button>
+        </div>
+    </div>
+</nav>
+
+<aside id="sidebar" class="fixed top-0 left-0 z-30 w-64 h-screen pt-20 transition-transform -translate-x-full bg-white border-r border-gray-200 lg:translate-x-0 dark:bg-gray-800 dark:border-gray-700" aria-label="Sidebar">
+    <div class="h-full px-3 pb-4 overflow-y-auto">
+        <ul class="space-y-1 font-medium">
+            <li><a href="#" data-section="services" class="sidebar-link active">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                Services
+            </a></li>
+            <li><a href="#" data-section="attendance" class="sidebar-link">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-4.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4"/></svg>
+                Attendance
+            </a></li>
+            <li><a href="#" data-section="fellowship-centers" class="sidebar-link">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
+                Fellowship Centers
+            </a></li>
+            <li><a href="#" data-section="fellowship-attendance" class="sidebar-link">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-4.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4"/></svg>
+                Fellowship Attendance
+            </a></li>
+            <li><a href="#" data-section="inventory" class="sidebar-link">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                Inventory
+            </a></li>
+        </ul>
+    </div>
+</aside>
+
+<div class="p-4 lg:ms-64 pt-20">
+
+    <section id="section-services" class="section-panel active">
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Services</h1>
+        <div class="table-scroll relative shadow-sm rounded-xl border border-gray-100 dark:border-gray-700">
+            <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                    <tr>
+                        <th class="px-4 py-3">Date</th>
+                        <th class="px-4 py-3">Day</th>
+                        <th class="px-4 py-3">Type</th>
+                        <th class="px-4 py-3">Preacher</th>
+                        <th class="px-4 py-3">Theme</th>
+                        <th class="px-4 py-3">Online Attendance</th>
+                    </tr>
+                </thead>
+                <tbody id="services-tbody"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="section-attendance" class="section-panel">
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Attendance</h1>
+        <div class="table-scroll relative shadow-sm rounded-xl border border-gray-100 dark:border-gray-700">
+            <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                    <tr>
+                        <th class="px-4 py-3">Service Date</th>
+                        <th class="px-4 py-3">Men</th>
+                        <th class="px-4 py-3">Women</th>
+                        <th class="px-4 py-3">Children</th>
+                        <th class="px-4 py-3">Sunday School</th>
+                        <th class="px-4 py-3">New Converts</th>
+                        <th class="px-4 py-3">First Timers</th>
+                        <th class="px-4 py-3">Total</th>
+                        <th class="px-4 py-3">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="attendance-tbody"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="section-fellowship-centers" class="section-panel">
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Fellowship Centers</h1>
+        <div class="table-scroll relative shadow-sm rounded-xl border border-gray-100 dark:border-gray-700">
+            <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                    <tr>
+                        <th class="px-4 py-3">Center Name</th>
+                        <th class="px-4 py-3">Zone</th>
+                        <th class="px-4 py-3">Leader</th>
+                        <th class="px-4 py-3">Location</th>
+                    </tr>
+                </thead>
+                <tbody id="fellowship-centers-tbody"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="section-fellowship-attendance" class="section-panel">
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Fellowship Attendance</h1>
+        <div class="table-scroll relative shadow-sm rounded-xl border border-gray-100 dark:border-gray-700">
+            <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                    <tr>
+                        <th class="px-4 py-3">Center</th>
+                        <th class="px-4 py-3">Date</th>
+                        <th class="px-4 py-3">Men</th>
+                        <th class="px-4 py-3">Women</th>
+                        <th class="px-4 py-3">Children</th>
+                        <th class="px-4 py-3">New Converts</th>
+                        <th class="px-4 py-3">Total</th>
+                        <th class="px-4 py-3">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="fellowship-attendance-tbody"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="section-inventory" class="section-panel">
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Inventory</h1>
+        <div class="table-scroll relative shadow-sm rounded-xl border border-gray-100 dark:border-gray-700">
+            <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                    <tr>
+                        <th class="px-4 py-3">Item Name</th>
+                        <th class="px-4 py-3">Category</th>
+                        <th class="px-4 py-3">Qty</th>
+                        <th class="px-4 py-3">Location</th>
+                        <th class="px-4 py-3">Condition</th>
+                        <th class="px-4 py-3">Value</th>
+                        <th class="px-4 py-3">Custodian</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-tbody"></tbody>
+            </table>
+        </div>
+    </section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>
+<script src="../JS/api.js"></script>
+<script src="../JS/dashboard.js"></script>
+<script src="../JS/viewer.js"></script>
+</body>
+</html>
