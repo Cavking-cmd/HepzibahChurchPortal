@@ -160,6 +160,30 @@ namespace ChurchPortal.Services.Implementations
             }
         }
 
+        public async Task<BaseResponse<List<UserDto>>> GetAllAsync()
+        {
+            try
+            {
+                var users = await _userRepository.GetAllUsersAsync();
+                return new BaseResponse<List<UserDto>>
+                {
+                    Message = "OK",
+                    Status = true,
+                    Data = users.Select(ToDto).ToList()
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return new BaseResponse<List<UserDto>>
+                {
+                    Message = "An error occurred while retrieving users.",
+                    Status = false,
+                    Data = null
+                };
+            }
+        }
+
         public async Task<BaseResponse<UserDto>> GetMeAsync(Guid userId)
         {
             try

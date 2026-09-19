@@ -7,5 +7,6 @@ namespace ChurchPortal.Repositories.Interfaces
     {
         Task<User?> GetUserAsync(Expression<Func<User, bool>> predicate);
         Task<User?> GetUserByEmailAsync(string email);
+        Task<List<User>> GetAllUsersAsync();
     }
 }

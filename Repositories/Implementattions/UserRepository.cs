@@ -37,5 +37,15 @@ namespace ChurchPortal.Repositories.Implementattions
                 .ThenInclude(a => a.Role)
                 .FirstOrDefaultAsync(predicate);
         }
+
+        public Task<List<User>> GetAllUsersAsync()
+        {
+            return _context.Set<User>()
+                .Include(a => a.UserRoles)
+                .ThenInclude(a => a.Role)
+                .Where(a => !a.IsDeleted)
+                .OrderBy(a => a.Email)
+                .ToListAsync();
+        }
     }
 }
