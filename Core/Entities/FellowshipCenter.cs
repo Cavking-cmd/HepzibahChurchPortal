@@ -6,6 +6,7 @@ namespace ChurchPortal.Core.Entities
         public required string Zone { get; set; }
         public required string LeaderName { get; set; }
         public required string Location { get; set; }
+        public string? Description { get; set; }
 
         public ICollection<FellowshipAttendance> FellowshipAttendances { get; set; } = new List<FellowshipAttendance>();
     }

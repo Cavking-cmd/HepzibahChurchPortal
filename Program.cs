@@ -121,6 +121,7 @@ using (var scope = app.Services.CreateScope())
 
     await InventorySeeder.SeedAsync(context);
     await UserSeeder.SeedAsync(context);
+    await FellowshipCenterSeeder.SeedAsync(context);
 }
 
 if (!app.Environment.IsDevelopment())
