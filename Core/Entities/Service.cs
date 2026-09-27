@@ -2,8 +2,9 @@ namespace ChurchPortal.Core.Entities
 {
     public enum ServiceType
     {
-        Sunday,
-        Wednesday,
+        SundayService,
+        WednesdayBibleStudy,
+        Rodah,
         Special
     }
 

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -14,7 +14,6 @@
             <input type="text" id="api-base" value="http://localhost:5080">
         </div>
     </header>
-
     <main>
         <section class="card" id="auth-card">
             <h2>1. Authentication</h2>
@@ -26,7 +25,6 @@
                 <button type="button" id="logout-btn">Logout</button>
             </form>
         </section>
-
         <nav class="tabs" id="tabs">
             <button class="tab-btn active" data-tab="services">Services</button>
             <button class="tab-btn" data-tab="attendance">Attendance</button>
@@ -34,18 +32,28 @@
             <button class="tab-btn" data-tab="fellowship-attendance">Fellowship Attendance</button>
             <button class="tab-btn" data-tab="inventory">Inventory</button>
         </nav>
-
         <section class="tab-panel active" id="tab-services">
             <div class="card">
                 <h2>Create Service</h2>
                 <form id="service-form" class="grid-form">
                     <label>Date <input type="date" name="date" required></label>
-                    <label>Day <input type="text" name="day" placeholder="Sunday" required></label>
+                    <label>Day <select name="day" required>
+<option value="">Select Day</option>
+<option value="Sunday">Sunday</option>
+<option value="Monday">Monday</option>
+<option value="Tuesday">Tuesday</option>
+<option value="Wednesday">Wednesday</option>
+<option value="Thursday">Thursday</option>
+<option value="Friday">Friday</option>
+<option value="Saturday">Saturday</option>
+</select></label>
                     <label>Service Type
                         <select name="serviceType">
-                            <option value="0">Sunday</option>
-                            <option value="1">Wednesday</option>
-                            <option value="2">Special</option>
+                            
+<option value="0">Sunday Service</option>
+<option value="1">Wednesday Bible Study</option>
+<option value="2">Rodah</option>
+<option value="3">Special</option>
                         </select>
                     </label>
                     <label>Theme <input type="text" name="theme"></label>
@@ -63,7 +71,6 @@
                 <div class="table-wrap"><table id="services-table"><thead></thead><tbody></tbody></table></div>
             </div>
         </section>
-
         <section class="tab-panel" id="tab-attendance">
             <div class="card">
                 <h2>Create Attendance Record</h2>
@@ -88,7 +95,6 @@
                 <div class="table-wrap"><table id="attendance-table"><thead></thead><tbody></tbody></table></div>
             </div>
         </section>
-
         <section class="tab-panel" id="tab-fellowship-centers">
             <div class="card">
                 <h2>Create Fellowship Center</h2>
@@ -108,7 +114,6 @@
                 <div class="table-wrap"><table id="fellowship-centers-table"><thead></thead><tbody></tbody></table></div>
             </div>
         </section>
-
         <section class="tab-panel" id="tab-fellowship-attendance">
             <div class="card">
                 <h2>Create Fellowship Attendance</h2>
@@ -132,7 +137,6 @@
                 <div class="table-wrap"><table id="fellowship-attendance-table"><thead></thead><tbody></tbody></table></div>
             </div>
         </section>
-
         <section class="tab-panel" id="tab-inventory">
             <div class="card">
                 <h2>Create Inventory Item</h2>
@@ -163,13 +167,11 @@
                 <div class="table-wrap"><table id="inventory-table"><thead></thead><tbody></tbody></table></div>
             </div>
         </section>
-
         <section class="card" id="log-card">
             <h2>Raw Request / Response Log</h2>
             <pre id="log-output">No requests yet.</pre>
         </section>
     </main>
-
     <script src="../JS/test-console.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-const apiBaseInput = document.getElementById("api-base");
+﻿const apiBaseInput = document.getElementById("api-base");
 apiBaseInput.value = localStorage.getItem("apiBase") || apiBaseInput.value;
 apiBaseInput.addEventListener("change", () => localStorage.setItem("apiBase", apiBaseInput.value));
 
@@ -112,7 +112,7 @@ function renderTable(tableId, columns, rows, actions) {
     }).join("");
 }
 
-const SERVICE_TYPE_NAMES = ["Sunday", "Wednesday", "Special"];
+const SERVICE_TYPE_NAMES = ["Sunday Service", "Wednesday Bible Study", "Rodah", "Special"];
 const ITEM_CONDITION_NAMES = ["Good", "NeedsRepair", "Replace"];
 
 async function loadServices() {

@@ -1,4 +1,4 @@
-const SERVICE_TYPE_NAMES = ["Sunday", "Wednesday", "Special"];
+﻿const SERVICE_TYPE_NAMES = ["Sunday Service", "Wednesday Bible Study", "Rodah", "Special"];
 const ITEM_CONDITION_NAMES = ["Good", "Needs Repair", "Replace"];
 
 let servicesCache = [];

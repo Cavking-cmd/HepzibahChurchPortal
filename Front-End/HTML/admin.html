@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -10,7 +10,6 @@
     <link rel="stylesheet" href="../CSS/dashboard.css">
 </head>
 <body class="bg-gray-50 dark:bg-gray-900" data-required-role="Admin">
-
 <nav class="fixed top-0 z-40 w-full bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700">
     <div class="px-3 py-3 lg:px-5 flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -35,7 +34,6 @@
         </div>
     </div>
 </nav>
-
 <aside id="sidebar" class="fixed top-0 left-0 z-30 w-64 h-screen pt-20 transition-transform -translate-x-full bg-white border-r border-gray-200 lg:translate-x-0 dark:bg-gray-800 dark:border-gray-700" aria-label="Sidebar">
     <div class="h-full px-3 pb-4 overflow-y-auto">
         <ul class="space-y-1 font-medium">
@@ -66,9 +64,7 @@
         </ul>
     </div>
 </aside>
-
 <div class="p-4 lg:ms-64 pt-20">
-
     <section id="section-overview" class="section-panel active">
         <h1 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Overview</h1>
         <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
@@ -111,7 +107,6 @@
         </div>
         <p class="text-sm text-gray-500 dark:text-gray-400">Use the sidebar to manage services, attendance, fellowship centers, fellowship attendance and inventory.</p>
     </section>
-
     <section id="section-services" class="section-panel">
         <div class="flex items-center justify-between mb-4">
             <h1 class="text-xl font-semibold text-gray-900 dark:text-white">Services</h1>
@@ -137,7 +132,6 @@
             </table>
         </div>
     </section>
-
     <section id="section-attendance" class="section-panel">
         <div class="flex items-center justify-between mb-4">
             <h1 class="text-xl font-semibold text-gray-900 dark:text-white">Attendance</h1>
@@ -166,7 +160,6 @@
             </table>
         </div>
     </section>
-
     <section id="section-fellowship-centers" class="section-panel">
         <div class="flex items-center justify-between mb-4">
             <h1 class="text-xl font-semibold text-gray-900 dark:text-white">Fellowship Centers</h1>
@@ -190,7 +183,6 @@
             </table>
         </div>
     </section>
-
     <section id="section-fellowship-attendance" class="section-panel">
         <div class="flex items-center justify-between mb-4">
             <h1 class="text-xl font-semibold text-gray-900 dark:text-white">Fellowship Attendance</h1>
@@ -218,7 +210,6 @@
             </table>
         </div>
     </section>
-
     <section id="section-inventory" class="section-panel">
         <div class="flex items-center justify-between mb-4">
             <h1 class="text-xl font-semibold text-gray-900 dark:text-white">Inventory</h1>
@@ -245,9 +236,7 @@
             </table>
         </div>
     </section>
-
 </div>
-
 <div id="service-modal" tabindex="-1" aria-hidden="true" class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-[calc(100%-1rem)] max-h-full">
     <div class="relative p-4 w-full max-w-lg max-h-full">
         <div class="relative bg-white rounded-lg shadow dark:bg-gray-700">
@@ -266,14 +255,25 @@
                     </div>
                     <div>
                         <label class="block mb-1 text-sm font-medium text-gray-900 dark:text-white">Day</label>
-                        <input type="text" name="day" required placeholder="Sunday" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                        <select name="day" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+<option value="">Select Day</option>
+<option value="Sunday">Sunday</option>
+<option value="Monday">Monday</option>
+<option value="Tuesday">Tuesday</option>
+<option value="Wednesday">Wednesday</option>
+<option value="Thursday">Thursday</option>
+<option value="Friday">Friday</option>
+<option value="Saturday">Saturday</option>
+</select>
                     </div>
                     <div>
                         <label class="block mb-1 text-sm font-medium text-gray-900 dark:text-white">Service Type</label>
                         <select name="serviceType" required class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:text-white">
-                            <option value="0">Sunday</option>
-                            <option value="1">Wednesday</option>
-                            <option value="2">Special</option>
+                            
+<option value="0">Sunday Service</option>
+<option value="1">Wednesday Bible Study</option>
+<option value="2">Rodah</option>
+<option value="3">Special</option>
                         </select>
                     </div>
                     <div>
@@ -298,7 +298,6 @@
         </div>
     </div>
 </div>
-
 <div id="attendance-modal" tabindex="-1" aria-hidden="true" class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-[calc(100%-1rem)] max-h-full">
     <div class="relative p-4 w-full max-w-lg max-h-full">
         <div class="relative bg-white rounded-lg shadow dark:bg-gray-700">
@@ -333,7 +332,6 @@
         </div>
     </div>
 </div>
-
 <div id="center-modal" tabindex="-1" aria-hidden="true" class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-[calc(100%-1rem)] max-h-full">
     <div class="relative p-4 w-full max-w-lg max-h-full">
         <div class="relative bg-white rounded-lg shadow dark:bg-gray-700">
@@ -360,7 +358,6 @@
         </div>
     </div>
 </div>
-
 <div id="fellowship-attendance-modal" tabindex="-1" aria-hidden="true" class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-[calc(100%-1rem)] max-h-full">
     <div class="relative p-4 w-full max-w-lg max-h-full">
         <div class="relative bg-white rounded-lg shadow dark:bg-gray-700">
@@ -391,7 +388,6 @@
         </div>
     </div>
 </div>
-
 <div id="inventory-modal" tabindex="-1" aria-hidden="true" class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-[calc(100%-1rem)] max-h-full">
     <div class="relative p-4 w-full max-w-lg max-h-full">
         <div class="relative bg-white rounded-lg shadow dark:bg-gray-700">
@@ -432,7 +428,6 @@
         </div>
     </div>
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>
 <script src="../JS/api.js"></script>
 <script src="../JS/dashboard.js"></script>
