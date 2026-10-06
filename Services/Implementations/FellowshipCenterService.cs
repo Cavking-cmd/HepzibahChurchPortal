@@ -29,7 +29,6 @@ namespace ChurchPortal.Services.Implementations
         {
             Id = c.Id,
             CenterName = c.CenterName,
-            Zone = c.Zone,
             LeaderName = c.LeaderName,
             Location = c.Location
         };
@@ -52,7 +51,6 @@ namespace ChurchPortal.Services.Implementations
                 var center = new FellowshipCenter
                 {
                     CenterName = model.CenterName,
-                    Zone = model.Zone,
                     LeaderName = model.LeaderName,
                     Location = model.Location
                 };
@@ -109,7 +107,6 @@ namespace ChurchPortal.Services.Implementations
                 }
 
                 center.CenterName = model.CenterName;
-                center.Zone = model.Zone;
                 center.LeaderName = model.LeaderName;
                 center.Location = model.Location;
 

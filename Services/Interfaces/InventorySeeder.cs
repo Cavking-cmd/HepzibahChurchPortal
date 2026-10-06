@@ -1741,11 +1741,14 @@ public static class InventorySeeder
             .OrderBy(x => x.CreatedDate)
             .ToListAsync();
 
-        var bySerial = existing
-            .Where(x => !string.IsNullOrWhiteSpace(x.SerialNumber))
-            .ToDictionary(x => x.SerialNumber!.Trim());
+        var active = existing.Where(x => !x.IsDeleted).ToList();
 
-        var waiting = new List<InventoryItem>(existing);
+        var bySerial = active
+            .Where(x => !string.IsNullOrWhiteSpace(x.SerialNumber))
+            .GroupBy(x => x.SerialNumber!.Trim())
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var waiting = new List<InventoryItem>(active);
         var matchedIds = new HashSet<Guid>();
 
         foreach (var seed in items)

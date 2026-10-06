@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE = "";
+const DEFAULT_API_BASE = "https://hepzibahchurchportal.onrender.com";
 
 export function getApiBase(): string {
   return (localStorage.getItem("apiBase") || DEFAULT_API_BASE).replace(/\/$/, "");
@@ -46,30 +46,37 @@ export function unwrap<T>(value: unknown): T[] {
   return [];
 }
 
-function isRefNode(node: unknown): node is { $id?: unknown; $values?: unknown } {
-  return !!node && typeof node === "object";
+export function deRef<T>(node: T): T {
+  return deRefNode(node, new WeakMap<object, unknown>()) as T;
 }
 
-export function deRef<T>(node: T): T {
+function deRefNode(node: unknown, visited: WeakMap<object, unknown>): unknown {
+  if (!node || typeof node !== "object") return node;
+
+  if (visited.has(node)) return visited.get(node);
+
   if (Array.isArray(node)) {
-    return node.map(deRef) as unknown as T;
+    const out: unknown[] = [];
+    visited.set(node, out);
+    for (const item of node) out.push(deRefNode(item, visited));
+    return out;
   }
-  if (isRefNode(node)) {
-    const out: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(node)) {
-      if (key === "$id") continue;
-      out[key] = value;
-    }
-    if ("$values" in node) {
-      const arr = (node as { $values: unknown }).$values;
-      if (isRefNode(arr) && "$values" in arr) {
-        return deRef<unknown[]>(Array.isArray((arr as { $values: unknown }).$values) ? (arr as { $values: unknown[] }).$values : []) as unknown as T;
-      }
-      return deRef<unknown[]>(Array.isArray(arr) ? arr : []) as unknown as T;
-    }
-    return deRef(out) as unknown as T;
+
+  if ("$values" in node) {
+    const out: unknown[] = [];
+    visited.set(node, out);
+    const values = deRefNode(node.$values, visited);
+    if (Array.isArray(values)) out.push(...values);
+    return out;
   }
-  return node;
+
+  const out: Record<string, unknown> = {};
+  visited.set(node, out);
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "$id") continue;
+    out[key] = deRefNode(value, visited);
+  }
+  return out;
 }
 
 export interface BaseResponse<T> {
@@ -133,7 +140,7 @@ export async function apiGet<T>(path: string): Promise<T | null> {
   return body.data;
 }
 
-export const SERVICE_TYPE_NAMES = ["Sunday", "Wednesday", "Special"] as const;
+export const SERVICE_TYPE_NAMES = ["Sunday Service", "Wednesday Bible Study", "Rodah", "Special"] as const;
 export const ITEM_CONDITION_NAMES = ["Good", "Needs Repair", "Replace"] as const;
 
 export interface ServiceDto {
@@ -166,7 +173,6 @@ export interface AttendanceDto {
 export interface FellowshipCenterDto {
   id: string;
   centerName: string;
-  zone: string;
   leaderName: string;
   location: string;
 }
@@ -286,17 +292,9 @@ export interface PreacherImpactDto {
 export interface CenterRankingDto {
   centerId: string;
   centerName: string;
-  zone: string;
   totalAttendance: number;
   averageAttendance: number;
   recordCount: number;
-}
-
-export interface ZoneSummaryDto {
-  zone: string;
-  totalAttendance: number;
-  centerCount: number;
-  averageAttendance: number;
 }
 
 export interface LeaderTrendDto {

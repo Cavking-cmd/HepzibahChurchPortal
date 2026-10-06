@@ -4,7 +4,6 @@ namespace ChurchPortal.Core.Dtos.Request
     {
         public Guid Id { get; set; }
         public required string CenterName { get; set; }
-        public required string Zone { get; set; }
         public required string LeaderName { get; set; }
         public required string Location { get; set; }
     }
@@ -12,7 +11,6 @@ namespace ChurchPortal.Core.Dtos.Request
     public class CreateFellowshipCenterRequestModel
     {
         public required string CenterName { get; set; }
-        public required string Zone { get; set; }
         public required string LeaderName { get; set; }
         public required string Location { get; set; }
     }
@@ -21,7 +19,6 @@ namespace ChurchPortal.Core.Dtos.Request
     {
         public required Guid Id { get; set; }
         public required string CenterName { get; set; }
-        public required string Zone { get; set; }
         public required string LeaderName { get; set; }
         public required string Location { get; set; }
     }

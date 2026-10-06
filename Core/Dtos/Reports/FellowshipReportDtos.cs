@@ -4,18 +4,9 @@ namespace ChurchPortal.Core.Dtos.Reports
     {
         public Guid CenterId { get; set; }
         public string CenterName { get; set; } = string.Empty;
-        public string Zone { get; set; } = string.Empty;
         public int TotalAttendance { get; set; }
         public double AverageAttendance { get; set; }
         public int RecordCount { get; set; }
-    }
-
-    public class ZoneSummaryDto
-    {
-        public string Zone { get; set; } = string.Empty;
-        public int TotalAttendance { get; set; }
-        public int CenterCount { get; set; }
-        public double AverageAttendance { get; set; }
     }
 
     public class LeaderTrendDto

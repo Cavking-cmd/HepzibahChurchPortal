@@ -43,7 +43,6 @@ namespace ChurchPortal.Services.Implementations
                         {
                             CenterId = center.Id,
                             CenterName = center.CenterName,
-                            Zone = center.Zone,
                             TotalAttendance = g.Sum(a => a.Total),
                             AverageAttendance = g.Average(a => a.Total),
                             RecordCount = g.Count()
@@ -57,38 +56,6 @@ namespace ChurchPortal.Services.Implementations
             catch (Exception ex)
             {
                 return new BaseResponse<List<CenterRankingDto>> { Message = ex.Message, Status = false, Data = null };
-            }
-        }
-
-        public async Task<BaseResponse<List<ZoneSummaryDto>>> GetZoneSummaryAsync()
-        {
-            try
-            {
-                var (attendances, centers) = await GetDataAsync();
-                var centerMap = centers.ToDictionary(c => c.Id);
-
-                var result = centers
-                    .GroupBy(c => c.Zone)
-                    .Select(g =>
-                    {
-                        var centerIds = g.Select(c => c.Id).ToHashSet();
-                        var zoneAttendances = attendances.Where(a => centerIds.Contains(a.FellowshipCenterId)).ToList();
-                        var total = zoneAttendances.Sum(a => a.Total);
-                        return new ZoneSummaryDto
-                        {
-                            Zone = g.Key,
-                            TotalAttendance = total,
-                            CenterCount = g.Count(),
-                            AverageAttendance = zoneAttendances.Count > 0 ? zoneAttendances.Average(a => a.Total) : 0
-                        };
-                    })
-                    .ToList();
-
-                return new BaseResponse<List<ZoneSummaryDto>> { Message = "Zone summary report generated.", Status = true, Data = result };
-            }
-            catch (Exception ex)
-            {
-                return new BaseResponse<List<ZoneSummaryDto>> { Message = ex.Message, Status = false, Data = null };
             }
         }
 

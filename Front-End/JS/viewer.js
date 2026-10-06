@@ -46,7 +46,6 @@ async function loadFellowshipCenters() {
 
     renderTableBody("fellowship-centers-tbody", centersCache, [
         { label: "Center Name", render: (r) => r.centerName },
-        { label: "Zone", render: (r) => r.zone },
         { label: "Leader", render: (r) => r.leaderName },
         { label: "Location", render: (r) => r.location }
     ]);

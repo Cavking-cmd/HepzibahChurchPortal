@@ -24,14 +24,6 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [HttpGet("zone-summary")]
-        public async Task<IActionResult> ZoneSummary()
-        {
-            var result = await _fellowshipReportService.GetZoneSummaryAsync();
-            if (result.Status) return Ok(result);
-            return BadRequest(result);
-        }
-
         [HttpGet("leader-trend")]
         public async Task<IActionResult> LeaderTrend()
         {

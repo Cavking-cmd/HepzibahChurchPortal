@@ -158,7 +158,7 @@ always recompute it.
 ### FellowshipCenter
 A home fellowship group.
 ```
-CenterName, Zone, LeaderName, Location
+CenterName, LeaderName, Location
 ```
 
 ### FellowshipAttendance

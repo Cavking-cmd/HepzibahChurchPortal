@@ -216,7 +216,6 @@ async function loadFellowshipCenters() {
     renderTable("fellowship-centers-table",
         [
             { label: "Center Name", key: "centerName" },
-            { label: "Zone", key: "zone" },
             { label: "Leader", key: "leaderName" },
             { label: "Location", key: "location" }
         ],
@@ -226,7 +225,7 @@ async function loadFellowshipCenters() {
 
     const select = document.getElementById("fellowship-attendance-center-select");
     select.innerHTML = rows.map((r) =>
-        `<option value="${r.id}">${r.centerName} (${r.zone})</option>`
+        `<option value="${r.id}">${r.centerName}</option>`
     ).join("") || `<option value="">No centers yet - create one first</option>`;
 }
 
@@ -235,7 +234,6 @@ document.getElementById("fellowship-center-form").addEventListener("submit", asy
     const f = e.target;
     const body = {
         centerName: f.centerName.value,
-        zone: f.zone.value,
         leaderName: f.leaderName.value,
         location: f.location.value
     };

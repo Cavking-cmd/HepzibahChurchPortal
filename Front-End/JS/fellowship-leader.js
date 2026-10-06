@@ -11,7 +11,6 @@ async function loadFellowshipCenters() {
 
     renderTableBody("fellowship-centers-tbody", centersCache, [
         { label: "Center Name", render: (r) => r.centerName },
-        { label: "Zone", render: (r) => r.zone },
         { label: "Leader", render: (r) => r.leaderName },
         { label: "Location", render: (r) => r.location }
     ], (row) => `
@@ -26,7 +25,7 @@ function populateCenterSelect() {
     const select = document.querySelector(".fellowship-center-select");
     if (!select) return;
     select.innerHTML = centersCache.map((r) =>
-        `<option value="${r.id}">${r.centerName} (${r.zone})</option>`
+        `<option value="${r.id}">${r.centerName}</option>`
     ).join("") || `<option value="">No centers yet - create one first</option>`;
 }
 
@@ -44,7 +43,6 @@ function editCenter(id) {
     const form = document.getElementById("center-form");
     form.id.value = row.id;
     form.centerName.value = row.centerName || "";
-    form.zone.value = row.zone || "";
     form.leaderName.value = row.leaderName || "";
     form.location.value = row.location || "";
     document.getElementById("center-modal-title").textContent = "Edit Fellowship Center";
@@ -56,7 +54,6 @@ document.getElementById("center-form").addEventListener("submit", async (e) => {
     const f = e.target;
     const body = {
         centerName: f.centerName.value,
-        zone: f.zone.value,
         leaderName: f.leaderName.value,
         location: f.location.value
     };
