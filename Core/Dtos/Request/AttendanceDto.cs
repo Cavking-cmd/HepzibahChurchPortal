@@ -10,6 +10,7 @@ namespace ChurchPortal.Core.Dtos.Request
         public int SundaySchool { get; set; }
         public int NewConverts { get; set; }
         public int FirstTimers { get; set; }
+        public int OnlineAttendance { get; set; }
         public int Total { get; set; }
         public bool IsApproved { get; set; }
         public bool IsLocked { get; set; }
@@ -26,6 +27,7 @@ namespace ChurchPortal.Core.Dtos.Request
         public int SundaySchool { get; set; }
         public int NewConverts { get; set; }
         public int FirstTimers { get; set; }
+        public int OnlineAttendance { get; set; }
     }
 
     public class UpdateAttendanceModel
@@ -38,5 +40,6 @@ namespace ChurchPortal.Core.Dtos.Request
         public int SundaySchool { get; set; }
         public int NewConverts { get; set; }
         public int FirstTimers { get; set; }
+        public int OnlineAttendance { get; set; }
     }
 }

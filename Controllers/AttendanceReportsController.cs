@@ -32,6 +32,14 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
+        [HttpGet("current-month-by-service")]
+        public async Task<IActionResult> CurrentMonthByService()
+        {
+            var result = await _attendanceReportService.GetCurrentMonthByServiceAsync();
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
         [HttpGet("demographics")]
         public async Task<IActionResult> Demographics([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
         {

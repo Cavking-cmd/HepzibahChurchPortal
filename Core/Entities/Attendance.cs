@@ -11,6 +11,7 @@ namespace ChurchPortal.Core.Entities
         public int SundaySchool { get; set; }
         public int NewConverts { get; set; }
         public int FirstTimers { get; set; }
+        public int OnlineAttendance { get; set; }
 
         public int Total { get; set; }
 

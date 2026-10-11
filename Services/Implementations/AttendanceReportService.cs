@@ -94,7 +94,6 @@ namespace ChurchPortal.Services.Implementations
             try
             {
                 var joined = await GetJoinedAsync();
-                var services = await _serviceRepository.GetAllAsync(s => !s.IsDeleted);
 
                 var byServiceType = joined
                     .GroupBy(x => x.Service.ServiceType)
@@ -107,14 +106,14 @@ namespace ChurchPortal.Services.Implementations
                     })
                     .ToList();
 
-                var onlineByMonth = services
-                    .GroupBy(s => new { s.Date.Year, s.Date.Month })
-                    .Select(g => new { g.Key.Year, g.Key.Month, Online = g.Sum(s => s.OnlineAttendance) })
+                var onlineByMonth = joined
+                    .GroupBy(x => new { x.Service.Date.Year, x.Service.Date.Month })
+                    .Select(g => new { g.Key.Year, g.Key.Month, Online = g.Sum(x => x.Attendance.OnlineAttendance) })
                     .ToList();
 
                 var physicalByMonth = joined
                     .GroupBy(x => new { x.Service.Date.Year, x.Service.Date.Month })
-                    .Select(g => new { g.Key.Year, g.Key.Month, Physical = g.Sum(x => x.Attendance.Total) })
+                    .Select(g => new { g.Key.Year, g.Key.Month, Physical = g.Sum(x => x.Attendance.Men + x.Attendance.Women + x.Attendance.Children) })
                     .ToList();
 
                 var months = onlineByMonth.Select(x => (x.Year, x.Month))
@@ -140,6 +139,67 @@ namespace ChurchPortal.Services.Implementations
             catch (Exception ex)
             {
                 return new BaseResponse<ServiceComparisonReportDto> { Message = ex.Message, Status = false, Data = null };
+            }
+        }
+
+        private static string ShortServiceType(ServiceType type) => type switch
+        {
+            ServiceType.SundayService => "Sunday",
+            ServiceType.WednesdayBibleStudy => "Bible Study",
+            ServiceType.Rodah => "Rodah",
+            ServiceType.Special => "Special",
+            _ => type.ToString()
+        };
+
+        public async Task<BaseResponse<CurrentMonthServiceAttendanceDto>> GetCurrentMonthByServiceAsync()
+        {
+            try
+            {
+                var now = DateTime.UtcNow;
+                var monthServices = await _serviceRepository.GetAllAsync(s => !s.IsDeleted && s.Date.Year == now.Year && s.Date.Month == now.Month);
+                var attendances = await _attendanceRepository.GetAllAsync(a => !a.IsDeleted);
+
+                var attendanceByService = attendances
+                    .GroupBy(a => a.ServiceId)
+                    .ToDictionary(g => g.Key, g => new
+                    {
+                        Online = g.Sum(a => a.OnlineAttendance),
+                        Physical = g.Sum(a => a.Men + a.Women + a.Children)
+                    });
+
+                var services = monthServices
+                    .OrderBy(s => s.Date)
+                    .Select(s =>
+                    {
+                        attendanceByService.TryGetValue(s.Id, out var agg);
+                        var online = agg?.Online ?? 0;
+                        var physical = agg?.Physical ?? 0;
+                        return new ServiceMonthAttendanceDto
+                        {
+                            ServiceId = s.Id,
+                            Date = s.Date,
+                            ServiceType = s.ServiceType.ToString(),
+                            Label = $"{s.Date:dd MMM} · {ShortServiceType(s.ServiceType)}",
+                            Online = online,
+                            Physical = physical,
+                            Total = physical + online
+                        };
+                    })
+                    .ToList();
+
+                var result = new CurrentMonthServiceAttendanceDto
+                {
+                    Year = now.Year,
+                    Month = now.Month,
+                    MonthLabel = new DateTime(now.Year, now.Month, 1).ToString("MMMM yyyy"),
+                    Services = services
+                };
+
+                return new BaseResponse<CurrentMonthServiceAttendanceDto> { Message = "Current month service attendance report generated.", Status = true, Data = result };
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<CurrentMonthServiceAttendanceDto> { Message = ex.Message, Status = false, Data = null };
             }
         }
 

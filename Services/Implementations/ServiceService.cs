@@ -29,8 +29,7 @@ namespace ChurchPortal.Services.Implementations
             ServiceType = s.ServiceType,
             Theme = s.Theme,
             ScriptureText = s.ScriptureText,
-            Preacher = s.Preacher,
-            OnlineAttendance = s.OnlineAttendance
+            Preacher = s.Preacher
         };
 
         public async Task<BaseResponse<ServiceDto>> CreateAsync(CreateServiceRequestModel model, Guid userId)
@@ -56,8 +55,7 @@ namespace ChurchPortal.Services.Implementations
                     ServiceType = model.ServiceType,
                     Theme = model.Theme,
                     ScriptureText = model.ScriptureText,
-                    Preacher = model.Preacher,
-                    OnlineAttendance = model.OnlineAttendance
+                    Preacher = model.Preacher
                 };
 
                 await _serviceRepository.CreateAsync(service);
@@ -125,7 +123,6 @@ namespace ChurchPortal.Services.Implementations
                 service.Theme = model.Theme;
                 service.ScriptureText = model.ScriptureText;
                 service.Preacher = model.Preacher;
-                service.OnlineAttendance = model.OnlineAttendance;
 
                 await _serviceRepository.Update(service);
                 await _auditLogRepository.CreateAsync(new AuditLog

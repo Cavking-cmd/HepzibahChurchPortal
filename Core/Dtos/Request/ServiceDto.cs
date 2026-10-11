@@ -11,7 +11,6 @@ namespace ChurchPortal.Core.Dtos.Request
         public string? Theme { get; set; }
         public string? ScriptureText { get; set; }
         public string? Preacher { get; set; }
-        public int OnlineAttendance { get; set; }
     }
 
     public class CreateServiceRequestModel
@@ -22,7 +21,6 @@ namespace ChurchPortal.Core.Dtos.Request
         public string? Theme { get; set; }
         public string? ScriptureText { get; set; }
         public string? Preacher { get; set; }
-        public int OnlineAttendance { get; set; }
     }
 
     public class UpdateServiceModel
@@ -34,6 +32,5 @@ namespace ChurchPortal.Core.Dtos.Request
         public string? Theme { get; set; }
         public string? ScriptureText { get; set; }
         public string? Preacher { get; set; }
-        public int OnlineAttendance { get; set; }
     }
 }

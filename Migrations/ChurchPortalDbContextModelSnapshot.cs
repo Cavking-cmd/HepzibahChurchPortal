@@ -58,6 +58,9 @@ namespace ChurchPortal.Migrations
                     b.Property<int>("NewConverts")
                         .HasColumnType("integer");
 
+                    b.Property<int>("OnlineAttendance")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("ServiceId")
                         .HasColumnType("uuid");
 
@@ -74,7 +77,7 @@ namespace ChurchPortal.Migrations
 
                     b.HasIndex("ServiceId");
 
-                    b.ToTable("Attendances", (string)null);
+                    b.ToTable("Attendances");
                 });
 
             modelBuilder.Entity("ChurchPortal.Core.Entities.AuditLog", b =>
@@ -111,7 +114,7 @@ namespace ChurchPortal.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AuditLogs", (string)null);
+                    b.ToTable("AuditLogs");
                 });
 
             modelBuilder.Entity("ChurchPortal.Core.Entities.FellowshipAttendance", b =>
@@ -163,7 +166,7 @@ namespace ChurchPortal.Migrations
 
                     b.HasIndex("FellowshipCenterId");
 
-                    b.ToTable("FellowshipAttendances", (string)null);
+                    b.ToTable("FellowshipAttendances");
                 });
 
             modelBuilder.Entity("ChurchPortal.Core.Entities.FellowshipCenter", b =>
@@ -195,7 +198,7 @@ namespace ChurchPortal.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("FellowshipCenters", (string)null);
+                    b.ToTable("FellowshipCenters");
                 });
 
             modelBuilder.Entity("ChurchPortal.Core.Entities.InventoryItem", b =>
@@ -250,7 +253,7 @@ namespace ChurchPortal.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("InventoryItems", (string)null);
+                    b.ToTable("InventoryItems");
                 });
 
             modelBuilder.Entity("ChurchPortal.Core.Entities.Role", b =>
@@ -274,13 +277,13 @@ namespace ChurchPortal.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Roles", (string)null);
+                    b.ToTable("Roles");
 
                     b.HasData(
                         new
                         {
                             Id = new Guid("11111111-1111-1111-1111-111111111111"),
-                            CreatedDate = new DateTime(2026, 10, 4, 9, 19, 27, 207, DateTimeKind.Utc).AddTicks(2804),
+                            CreatedDate = new DateTime(2026, 10, 11, 12, 27, 34, 549, DateTimeKind.Utc).AddTicks(6586),
                             Description = "Full access, including approvals",
                             IsDeleted = false,
                             Name = "Admin"
@@ -288,7 +291,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("22222222-2222-2222-2222-222222222222"),
-                            CreatedDate = new DateTime(2026, 10, 4, 9, 19, 27, 207, DateTimeKind.Utc).AddTicks(2810),
+                            CreatedDate = new DateTime(2026, 10, 11, 12, 27, 34, 549, DateTimeKind.Utc).AddTicks(6590),
                             Description = "Manages Services and Attendance records",
                             IsDeleted = false,
                             Name = "AttendanceOfficer"
@@ -296,7 +299,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("33333333-3333-3333-3333-333333333333"),
-                            CreatedDate = new DateTime(2026, 10, 4, 9, 19, 27, 207, DateTimeKind.Utc).AddTicks(2819),
+                            CreatedDate = new DateTime(2026, 10, 11, 12, 27, 34, 549, DateTimeKind.Utc).AddTicks(6615),
                             Description = "Manages FellowshipCenters and FellowshipAttendance records",
                             IsDeleted = false,
                             Name = "FellowshipLeader"
@@ -304,7 +307,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("44444444-4444-4444-4444-444444444444"),
-                            CreatedDate = new DateTime(2026, 10, 4, 9, 19, 27, 207, DateTimeKind.Utc).AddTicks(2820),
+                            CreatedDate = new DateTime(2026, 10, 11, 12, 27, 34, 549, DateTimeKind.Utc).AddTicks(6617),
                             Description = "Manages InventoryItem records",
                             IsDeleted = false,
                             Name = "InventoryOfficer"
@@ -312,7 +315,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("55555555-5555-5555-5555-555555555555"),
-                            CreatedDate = new DateTime(2026, 10, 4, 9, 19, 27, 207, DateTimeKind.Utc).AddTicks(2821),
+                            CreatedDate = new DateTime(2026, 10, 11, 12, 27, 34, 549, DateTimeKind.Utc).AddTicks(6625),
                             Description = "Read-only access",
                             IsDeleted = false,
                             Name = "Viewer"
@@ -338,9 +341,6 @@ namespace ChurchPortal.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("OnlineAttendance")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Preacher")
                         .HasColumnType("text");
 
@@ -355,7 +355,7 @@ namespace ChurchPortal.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Services", (string)null);
+                    b.ToTable("Services");
                 });
 
             modelBuilder.Entity("ChurchPortal.Core.Entities.User", b =>
@@ -389,16 +389,16 @@ namespace ChurchPortal.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
 
                     b.HasData(
                         new
                         {
                             Id = new Guid("99999999-9999-9999-9999-999999999999"),
-                            CreatedDate = new DateTime(2026, 10, 4, 9, 19, 27, 373, DateTimeKind.Utc).AddTicks(384),
+                            CreatedDate = new DateTime(2026, 10, 11, 12, 27, 34, 698, DateTimeKind.Utc).AddTicks(4770),
                             Email = "admin@churchportal.local",
                             IsDeleted = false,
-                            Password = "$2a$11$BSWyfkHuKQsTohEtyVHHnO9YmbGfR2tablrE0Wsm1OBs0nfaZtYuq"
+                            Password = "$2a$11$n9VjXrFgYTV1auxxnx2nuOQv.AwnW/yCV5rT9FhOC68XIrH8Hhw3i"
                         });
                 });
 
@@ -441,7 +441,7 @@ namespace ChurchPortal.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserCredentials", (string)null);
+                    b.ToTable("UserCredentials");
                 });
 
             modelBuilder.Entity("ChurchPortal.Core.Entities.UserRole", b =>
@@ -468,13 +468,13 @@ namespace ChurchPortal.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserRoles", (string)null);
+                    b.ToTable("UserRoles");
 
                     b.HasData(
                         new
                         {
                             Id = new Guid("88888888-8888-8888-8888-888888888888"),
-                            CreatedDate = new DateTime(2026, 10, 4, 9, 19, 27, 373, DateTimeKind.Utc).AddTicks(476),
+                            CreatedDate = new DateTime(2026, 10, 11, 12, 27, 34, 698, DateTimeKind.Utc).AddTicks(4867),
                             IsDeleted = false,
                             RoleId = new Guid("11111111-1111-1111-1111-111111111111"),
                             UserId = new Guid("99999999-9999-9999-9999-999999999999")

@@ -35,6 +35,7 @@ namespace ChurchPortal.Services.Implementations
             SundaySchool = a.SundaySchool,
             NewConverts = a.NewConverts,
             FirstTimers = a.FirstTimers,
+            OnlineAttendance = a.OnlineAttendance,
             Total = a.Total,
             IsApproved = a.IsApproved,
             IsLocked = a.IsLocked,
@@ -66,7 +67,8 @@ namespace ChurchPortal.Services.Implementations
                     SundaySchool = model.SundaySchool,
                     NewConverts = model.NewConverts,
                     FirstTimers = model.FirstTimers,
-                    Total = model.Men + model.Women + model.Children
+                    OnlineAttendance = model.OnlineAttendance,
+                    Total = model.Men + model.Women + model.Children + model.OnlineAttendance
                 };
 
                 await _attendanceRepository.CreateAsync(attendance);
@@ -132,7 +134,8 @@ namespace ChurchPortal.Services.Implementations
                 attendance.SundaySchool = model.SundaySchool;
                 attendance.NewConverts = model.NewConverts;
                 attendance.FirstTimers = model.FirstTimers;
-                attendance.Total = model.Men + model.Women + model.Children;
+                attendance.OnlineAttendance = model.OnlineAttendance;
+                attendance.Total = model.Men + model.Women + model.Children + model.OnlineAttendance;
 
                 await _attendanceRepository.Update(attendance);
                 await _auditLogRepository.CreateAsync(new AuditLog

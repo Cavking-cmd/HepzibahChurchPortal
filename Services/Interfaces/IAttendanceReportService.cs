@@ -7,6 +7,7 @@ namespace ChurchPortal.Services.Interfaces
     {
         Task<BaseResponse<List<MonthlyGrowthDto>>> GetMonthlyGrowthAsync(int months);
         Task<BaseResponse<ServiceComparisonReportDto>> GetServiceComparisonAsync();
+        Task<BaseResponse<CurrentMonthServiceAttendanceDto>> GetCurrentMonthByServiceAsync();
         Task<BaseResponse<DemographicsReportDto>> GetDemographicsAsync(DateTime? startDate, DateTime? endDate);
         Task<BaseResponse<FirstTimerConversionDto>> GetFirstTimerConversionAsync();
         Task<BaseResponse<List<PreacherImpactDto>>> GetPreacherImpactAsync();

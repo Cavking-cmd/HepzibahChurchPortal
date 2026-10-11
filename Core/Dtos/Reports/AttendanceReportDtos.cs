@@ -51,4 +51,23 @@ namespace ChurchPortal.Core.Dtos.Reports
         public double AverageAttendance { get; set; }
         public int ServiceCount { get; set; }
     }
+
+    public class ServiceMonthAttendanceDto
+    {
+        public Guid ServiceId { get; set; }
+        public DateTime Date { get; set; }
+        public string Label { get; set; } = string.Empty;
+        public string ServiceType { get; set; } = string.Empty;
+        public int Total { get; set; }
+        public int Online { get; set; }
+        public int Physical { get; set; }
+    }
+
+    public class CurrentMonthServiceAttendanceDto
+    {
+        public int Year { get; set; }
+        public int Month { get; set; }
+        public string MonthLabel { get; set; } = string.Empty;
+        public List<ServiceMonthAttendanceDto> Services { get; set; } = new();
+    }
 }

@@ -16,7 +16,6 @@ namespace ChurchPortal.Core.Entities
         public string? Theme { get; set; }
         public string? ScriptureText { get; set; }
         public string? Preacher { get; set; }
-        public int OnlineAttendance { get; set; }
 
         public ICollection<Attendance> Attendances { get; set; } = new List<Attendance>();
     }
