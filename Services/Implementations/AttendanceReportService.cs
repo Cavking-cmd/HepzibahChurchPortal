@@ -89,11 +89,17 @@ namespace ChurchPortal.Services.Implementations
             }
         }
 
-        public async Task<BaseResponse<ServiceComparisonReportDto>> GetServiceComparisonAsync()
+        private static bool InMonth(Service service, DateTime month) =>
+            service.Date.Year == month.Year && service.Date.Month == month.Month;
+
+        public async Task<BaseResponse<ServiceComparisonReportDto>> GetServiceComparisonAsync(DateTime? month = null)
         {
             try
             {
                 var joined = await GetJoinedAsync();
+
+                if (month.HasValue && month.Value != default)
+                    joined = joined.Where(x => InMonth(x.Service, month.Value)).ToList();
 
                 var byServiceType = joined
                     .GroupBy(x => x.Service.ServiceType)
@@ -151,12 +157,11 @@ namespace ChurchPortal.Services.Implementations
             _ => type.ToString()
         };
 
-        public async Task<BaseResponse<CurrentMonthServiceAttendanceDto>> GetCurrentMonthByServiceAsync()
+        public async Task<BaseResponse<MonthServiceAttendanceDto>> GetMonthByServiceAsync(DateTime month)
         {
             try
             {
-                var now = DateTime.UtcNow;
-                var monthServices = await _serviceRepository.GetAllAsync(s => !s.IsDeleted && s.Date.Year == now.Year && s.Date.Month == now.Month);
+                var monthServices = await _serviceRepository.GetAllAsync(s => !s.IsDeleted && s.Date.Year == month.Year && s.Date.Month == month.Month);
                 var attendances = await _attendanceRepository.GetAllAsync(a => !a.IsDeleted);
 
                 var attendanceByService = attendances
@@ -187,19 +192,19 @@ namespace ChurchPortal.Services.Implementations
                     })
                     .ToList();
 
-                var result = new CurrentMonthServiceAttendanceDto
+                var result = new MonthServiceAttendanceDto
                 {
-                    Year = now.Year,
-                    Month = now.Month,
-                    MonthLabel = new DateTime(now.Year, now.Month, 1).ToString("MMMM yyyy"),
+                    Year = month.Year,
+                    Month = month.Month,
+                    MonthLabel = new DateTime(month.Year, month.Month, 1).ToString("MMMM yyyy"),
                     Services = services
                 };
 
-                return new BaseResponse<CurrentMonthServiceAttendanceDto> { Message = "Current month service attendance report generated.", Status = true, Data = result };
+                return new BaseResponse<MonthServiceAttendanceDto> { Message = "Month service attendance report generated.", Status = true, Data = result };
             }
             catch (Exception ex)
             {
-                return new BaseResponse<CurrentMonthServiceAttendanceDto> { Message = ex.Message, Status = false, Data = null };
+                return new BaseResponse<MonthServiceAttendanceDto> { Message = ex.Message, Status = false, Data = null };
             }
         }
 
@@ -230,14 +235,17 @@ namespace ChurchPortal.Services.Implementations
             }
         }
 
-        public async Task<BaseResponse<FirstTimerConversionDto>> GetFirstTimerConversionAsync()
+        public async Task<BaseResponse<FirstTimerConversionDto>> GetFirstTimerConversionAsync(DateTime? month = null)
         {
             try
             {
-                var attendances = await _attendanceRepository.GetAllAsync(a => !a.IsDeleted);
+                var joined = await GetJoinedAsync();
 
-                var totalFirstTimers = attendances.Sum(a => a.FirstTimers);
-                var totalNewConverts = attendances.Sum(a => a.NewConverts);
+                if (month.HasValue && month.Value != default)
+                    joined = joined.Where(x => InMonth(x.Service, month.Value)).ToList();
+
+                var totalFirstTimers = joined.Sum(x => x.Attendance.FirstTimers);
+                var totalNewConverts = joined.Sum(x => x.Attendance.NewConverts);
 
                 var rate = totalFirstTimers == 0 ? 0.0 : Math.Round((double)totalNewConverts / totalFirstTimers * 100.0, 1);
 
@@ -256,11 +264,14 @@ namespace ChurchPortal.Services.Implementations
             }
         }
 
-        public async Task<BaseResponse<List<PreacherImpactDto>>> GetPreacherImpactAsync()
+        public async Task<BaseResponse<List<PreacherImpactDto>>> GetPreacherImpactAsync(DateTime? month = null)
         {
             try
             {
                 var joined = await GetJoinedAsync();
+
+                if (month.HasValue && month.Value != default)
+                    joined = joined.Where(x => InMonth(x.Service, month.Value)).ToList();
 
                 var result = joined
                     .Where(x => !string.IsNullOrWhiteSpace(x.Service.Preacher))
@@ -280,6 +291,32 @@ namespace ChurchPortal.Services.Implementations
             catch (Exception ex)
             {
                 return new BaseResponse<List<PreacherImpactDto>> { Message = ex.Message, Status = false, Data = null };
+            }
+        }
+
+        public async Task<BaseResponse<List<MonthOptionDto>>> GetAvailableMonthsAsync()
+        {
+            try
+            {
+                var services = await _serviceRepository.GetAllAsync(s => !s.IsDeleted);
+
+                var months = services
+                    .Select(s => new { s.Date.Year, s.Date.Month })
+                    .Distinct()
+                    .OrderBy(m => m.Year).ThenBy(m => m.Month)
+                    .Select(m => new MonthOptionDto
+                    {
+                        Year = m.Year,
+                        Month = m.Month,
+                        Label = new DateTime(m.Year, m.Month, 1).ToString("MMMM yyyy")
+                    })
+                    .ToList();
+
+                return new BaseResponse<List<MonthOptionDto>> { Message = "Available report months retrieved.", Status = true, Data = months };
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<List<MonthOptionDto>> { Message = ex.Message, Status = false, Data = null };
             }
         }
     }

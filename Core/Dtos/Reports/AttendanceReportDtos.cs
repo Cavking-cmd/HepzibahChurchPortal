@@ -63,11 +63,18 @@ namespace ChurchPortal.Core.Dtos.Reports
         public int Physical { get; set; }
     }
 
-    public class CurrentMonthServiceAttendanceDto
+    public class MonthServiceAttendanceDto
     {
         public int Year { get; set; }
         public int Month { get; set; }
         public string MonthLabel { get; set; } = string.Empty;
         public List<ServiceMonthAttendanceDto> Services { get; set; } = new();
+    }
+
+    public class MonthOptionDto
+    {
+        public int Year { get; set; }
+        public int Month { get; set; }
+        public string Label { get; set; } = string.Empty;
     }
 }

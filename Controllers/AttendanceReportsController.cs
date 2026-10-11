@@ -1,6 +1,7 @@
 using ChurchPortal.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Globalization;
 
 namespace ChurchPortal.Controllers
 {
@@ -16,6 +17,14 @@ namespace ChurchPortal.Controllers
             _attendanceReportService = attendanceReportService;
         }
 
+        private static DateTime? ParseMonth(string? month)
+        {
+            if (string.IsNullOrWhiteSpace(month)) return null;
+            return DateTime.TryParseExact(month, "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+                ? parsed
+                : null;
+        }
+
         [HttpGet("monthly-growth")]
         public async Task<IActionResult> MonthlyGrowth([FromQuery] int months = 12)
         {
@@ -25,17 +34,17 @@ namespace ChurchPortal.Controllers
         }
 
         [HttpGet("service-comparison")]
-        public async Task<IActionResult> ServiceComparison()
+        public async Task<IActionResult> ServiceComparison([FromQuery] string? month = null)
         {
-            var result = await _attendanceReportService.GetServiceComparisonAsync();
+            var result = await _attendanceReportService.GetServiceComparisonAsync(ParseMonth(month));
             if (result.Status) return Ok(result);
             return BadRequest(result);
         }
 
-        [HttpGet("current-month-by-service")]
-        public async Task<IActionResult> CurrentMonthByService()
+        [HttpGet("month-by-service")]
+        public async Task<IActionResult> MonthByService([FromQuery] string? month = null)
         {
-            var result = await _attendanceReportService.GetCurrentMonthByServiceAsync();
+            var result = await _attendanceReportService.GetMonthByServiceAsync(ParseMonth(month) ?? DateTime.UtcNow);
             if (result.Status) return Ok(result);
             return BadRequest(result);
         }
@@ -49,17 +58,25 @@ namespace ChurchPortal.Controllers
         }
 
         [HttpGet("first-timer-conversion")]
-        public async Task<IActionResult> FirstTimerConversion()
+        public async Task<IActionResult> FirstTimerConversion([FromQuery] string? month = null)
         {
-            var result = await _attendanceReportService.GetFirstTimerConversionAsync();
+            var result = await _attendanceReportService.GetFirstTimerConversionAsync(ParseMonth(month));
             if (result.Status) return Ok(result);
             return BadRequest(result);
         }
 
         [HttpGet("preacher-impact")]
-        public async Task<IActionResult> PreacherImpact()
+        public async Task<IActionResult> PreacherImpact([FromQuery] string? month = null)
         {
-            var result = await _attendanceReportService.GetPreacherImpactAsync();
+            var result = await _attendanceReportService.GetPreacherImpactAsync(ParseMonth(month));
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        [HttpGet("available-months")]
+        public async Task<IActionResult> AvailableMonths()
+        {
+            var result = await _attendanceReportService.GetAvailableMonthsAsync();
             if (result.Status) return Ok(result);
             return BadRequest(result);
         }
