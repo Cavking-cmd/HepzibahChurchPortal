@@ -38,7 +38,7 @@ namespace ChurchPortal.Services.Implementations
             AvatarBase64 = user.AvatarFile != null && user.AvatarFile.Length > 0
                 ? $"data:{user.AvatarMimeType};base64,{Convert.ToBase64String(user.AvatarFile)}"
                 : null,
-            UserRoles = user.UserRoles.Select(ur => ur.Role!.Name).ToList()
+            UserRoles = user.UserRoles.Where(ur => !ur.IsDeleted && ur.Role != null && !ur.Role.IsDeleted).Select(ur => ur.Role!.Name).ToList()
         };
 
         public async Task<bool> DeleteAsync(Guid id)
@@ -86,7 +86,7 @@ namespace ChurchPortal.Services.Implementations
                     {
                         Id = user.Id,
                         Email = user.Email,
-                        UserRoles = user.UserRoles.Select(ur => ur.Role!.Name).ToList()
+                        UserRoles = user.UserRoles.Where(ur => !ur.IsDeleted && ur.Role != null && !ur.Role.IsDeleted).Select(ur => ur.Role!.Name).ToList()
                     }
                 };
             }

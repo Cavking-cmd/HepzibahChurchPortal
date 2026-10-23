@@ -36,7 +36,7 @@ namespace ChurchPortal.Controllers
             return NotFound(result);
         }
 
-        [Authorize(Roles = "Admin,AttendanceOfficer")]
+        [Authorize(Roles = "AccountsAdmin,Admin,AttendanceOfficer")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateAttendanceRequestModel model)
         {
@@ -45,7 +45,7 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "Admin,AttendanceOfficer")]
+        [Authorize(Roles = "AccountsAdmin,Admin,AttendanceOfficer")]
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAttendanceModel model)
         {
@@ -55,7 +55,7 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "Admin,AttendanceOfficer")]
+        [Authorize(Roles = "AccountsAdmin,Admin,AttendanceOfficer")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(Guid id)
         {
@@ -64,7 +64,7 @@ namespace ChurchPortal.Controllers
             return NotFound(result);
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "AccountsAdmin,Admin")]
         [HttpPost("{id}/approve")]
         public async Task<IActionResult> Approve(Guid id)
         {
@@ -73,7 +73,7 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "AccountsAdmin,Admin")]
         [HttpPost("{id}/lock")]
         public async Task<IActionResult> Lock(Guid id)
         {

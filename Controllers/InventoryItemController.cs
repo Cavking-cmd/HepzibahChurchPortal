@@ -36,7 +36,7 @@ namespace ChurchPortal.Controllers
             return NotFound(result);
         }
 
-        [Authorize(Roles = "Admin,InventoryOfficer")]
+        [Authorize(Roles = "AccountsAdmin,Admin,InventoryOfficer")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateInventoryItemRequestModel model)
         {
@@ -45,7 +45,7 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "Admin,InventoryOfficer")]
+        [Authorize(Roles = "AccountsAdmin,Admin,InventoryOfficer")]
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateInventoryItemModel model)
         {
@@ -55,7 +55,7 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "Admin,InventoryOfficer")]
+        [Authorize(Roles = "AccountsAdmin,Admin,InventoryOfficer")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(Guid id)
         {

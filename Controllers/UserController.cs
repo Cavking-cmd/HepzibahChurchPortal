@@ -23,7 +23,7 @@ namespace ChurchPortal.Controllers
             _authService = authService;
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "AccountsAdmin,Admin")]
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequestModel model)
         {
@@ -53,7 +53,7 @@ namespace ChurchPortal.Controllers
             return Unauthorized(result);
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "AccountsAdmin,Admin")]
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
@@ -65,7 +65,7 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "AccountsAdmin,Admin")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(Guid id)
         {

@@ -99,6 +99,10 @@ builder.Services.AddScoped<IAttendanceReportService, AttendanceReportService>();
 builder.Services.AddScoped<IFellowshipReportService, FellowshipReportService>();
 builder.Services.AddScoped<IInventoryReportService, InventoryReportService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
+
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
@@ -110,6 +114,8 @@ builder.Services.AddScoped<IFellowshipCenterRepository, FellowshipCenterReposito
 builder.Services.AddScoped<IFellowshipAttendanceRepository, FellowshipAttendanceRepository>();
 builder.Services.AddScoped<IInventoryItemRepository, InventoryItemRepository>();
 builder.Services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
+builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 

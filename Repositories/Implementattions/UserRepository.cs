@@ -47,5 +47,16 @@ namespace ChurchPortal.Repositories.Implementattions
                 .OrderBy(a => a.Email)
                 .ToListAsync();
         }
+
+        public Task<List<User>> GetUsersByRoleAsync(string roleName)
+        {
+            return _context.Set<User>()
+                .Include(a => a.UserRoles)
+                .ThenInclude(a => a.Role)
+                .Where(a => !a.IsDeleted &&
+                    a.UserRoles.Any(ur => !ur.IsDeleted && ur.Role != null && ur.Role.Name == roleName && !ur.Role.IsDeleted))
+                .OrderBy(a => a.Email)
+                .ToListAsync();
+        }
     }
 }

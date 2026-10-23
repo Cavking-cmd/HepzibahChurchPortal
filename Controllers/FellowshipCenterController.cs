@@ -36,7 +36,7 @@ namespace ChurchPortal.Controllers
             return NotFound(result);
         }
 
-        [Authorize(Roles = "Admin,FellowshipLeader")]
+        [Authorize(Roles = "AccountsAdmin,Admin,FellowshipLeader")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateFellowshipCenterRequestModel model)
         {
@@ -45,7 +45,7 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "Admin,FellowshipLeader")]
+        [Authorize(Roles = "AccountsAdmin,Admin,FellowshipLeader")]
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateFellowshipCenterModel model)
         {
@@ -55,7 +55,7 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "Admin,FellowshipLeader")]
+        [Authorize(Roles = "AccountsAdmin,Admin,FellowshipLeader")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(Guid id)
         {

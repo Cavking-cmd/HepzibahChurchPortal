@@ -12,7 +12,10 @@ public static class UserSeeder
         new("attendance.officer@churchportal.local", "Attendance@123", "AttendanceOfficer", "Attendance Officer"),
         new("fellowship.leader@churchportal.local", "Fellowship@123", "FellowshipLeader", "Fellowship Leader"),
         new("inventory.officer@churchportal.local", "Inventory@123", "InventoryOfficer", "Inventory Officer"),
-        new("viewer@churchportal.local", "Viewer@123", "Viewer", "Viewer")
+        new("member@churchportal.local", "Member@123", "ChurchMember", "Church Member"),
+        new("accounts.officer@churchportal.local", "Accounts@123", "AccountsOfficer", "Accounts Officer"),
+        new("accounts.admin@churchportal.local", "AccountsAdmin@123", "AccountsAdmin", "Accounts Administrator"),
+        new("pastor@churchportal.local", "Pastor@123", "Pastor", "Pastor")
     };
 
     public static async Task SeedAsync(ChurchPortalDbContext context)
