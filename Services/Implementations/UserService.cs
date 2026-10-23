@@ -1,18 +1,27 @@
+using System.Security.Cryptography;
 using ChurchPortal.Core.Dtos;
 using ChurchPortal.Core.Dtos.UserDtos;
 using ChurchPortal.Core.Entities;
 using ChurchPortal.Repositories.Interfaces;
 using ChurchPortal.Services.Interfaces;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace ChurchPortal.Services.Implementations
 {
     public class UserService : IUserService
     {
+        private const int VerificationTokenHours = 48;
+        private const int ResetTokenHours = 2;
+
         private readonly IUserRepository _userRepository;
         private readonly IRoleRepository _roleRepository;
         private readonly IUserRoleRepository _userRoleRepository;
         private readonly IAuditLogRepository _auditLogRepository;
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IEmailSender _emailSender;
+        private readonly EmailOptions _emailOptions;
+        private readonly ILogger<UserService> _logger;
 
         private const int MaxAvatarBytes = 2 * 1024 * 1024;
 
@@ -21,13 +30,19 @@ namespace ChurchPortal.Services.Implementations
             IRoleRepository roleRepository,
             IUserRoleRepository userRoleRepository,
             IAuditLogRepository auditLogRepository,
-            IUnitOfWork unitOfWork)
+            IUnitOfWork unitOfWork,
+            IEmailSender emailSender,
+            IOptions<EmailOptions> emailOptions,
+            ILogger<UserService> logger)
         {
             _userRepository = userRepository;
             _roleRepository = roleRepository;
             _userRoleRepository = userRoleRepository;
             _auditLogRepository = auditLogRepository;
             _unitOfWork = unitOfWork;
+            _emailSender = emailSender;
+            _emailOptions = emailOptions.Value;
+            _logger = logger;
         }
 
         private static UserDto ToDto(User user) => new UserDto
@@ -38,6 +53,7 @@ namespace ChurchPortal.Services.Implementations
             AvatarBase64 = user.AvatarFile != null && user.AvatarFile.Length > 0
                 ? $"data:{user.AvatarMimeType};base64,{Convert.ToBase64String(user.AvatarFile)}"
                 : null,
+            EmailVerified = user.EmailVerified,
             UserRoles = user.UserRoles.Where(ur => !ur.IsDeleted && ur.Role != null && !ur.Role.IsDeleted).Select(ur => ur.Role!.Name).ToList()
         };
 
@@ -130,7 +146,9 @@ namespace ChurchPortal.Services.Implementations
                 var user = new User
                 {
                     Email = registerRequest.Email,
-                    Password = BCrypt.Net.BCrypt.HashPassword(registerRequest.Password)
+                    Password = BCrypt.Net.BCrypt.HashPassword(registerRequest.Password),
+                    EmailVerificationToken = GenerateToken(),
+                    EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(VerificationTokenHours)
                 };
 
                 await _userRepository.CreateAsync(user);
@@ -142,14 +160,17 @@ namespace ChurchPortal.Services.Implementations
                 }
                 await _unitOfWork.SaveChangesAsync();
 
+                await SendVerificationEmailAsync(user);
+
                 return new BaseResponse<UserDto>
                 {
-                    Message = "User registered successfully.",
+                    Message = "User registered successfully. A verification email has been sent.",
                     Status = true,
                     Data = new UserDto
                     {
                         Id = user.Id,
                         Email = user.Email,
+                        EmailVerified = user.EmailVerified,
                         UserRoles = roles.Select(r => r.Name).ToList()
                     }
                 };
@@ -332,6 +353,221 @@ namespace ChurchPortal.Services.Implementations
             {
                 Console.WriteLine(ex.Message);
                 return new BaseResponse<bool> { Message = "An error occurred while updating the password.", Status = false, Data = false };
+            }
+        }
+
+        public async Task<BaseResponse<bool>> ForgotPasswordAsync(ForgotPasswordRequest request)
+        {
+            try
+            {
+                if (Validator.CheckNull(request) || Validator.CheckString(request.Email))
+                {
+                    return new BaseResponse<bool> { Message = "Email is required.", Status = false, Data = false };
+                }
+
+                var user = await _userRepository.GetUserByEmailAsync(request.Email.Trim());
+
+                // Always report success so the endpoint cannot be used to enumerate accounts.
+                if (user == null)
+                {
+                    return new BaseResponse<bool>
+                    {
+                        Message = "If an account with that email exists, a reset link has been sent.",
+                        Status = true,
+                        Data = true
+                    };
+                }
+
+                user.PasswordResetToken = GenerateToken();
+                user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(ResetTokenHours);
+                await _userRepository.Update(user);
+
+                var link = BuildFrontendLink($"/reset-password?token={user.PasswordResetToken}");
+                await SafeSendAsync(
+                    user.Email,
+                    "Reset your Hephzibah Church portal password",
+                    EmailTemplates.ResetPassword(user.DisplayName ?? user.Email, link, ResetTokenHours));
+
+                await _auditLogRepository.CreateAsync(new AuditLog
+                {
+                    EntityName = nameof(User),
+                    EntityId = user.Id,
+                    Action = "PasswordResetRequested",
+                    UserId = user.Id
+                });
+                await _unitOfWork.SaveChangesAsync();
+
+                return new BaseResponse<bool>
+                {
+                    Message = "If an account with that email exists, a reset link has been sent.",
+                    Status = true,
+                    Data = true
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Forgot password failed for {Email}.", request.Email);
+                return new BaseResponse<bool> { Message = "An error occurred while requesting a password reset.", Status = false, Data = false };
+            }
+        }
+
+        public async Task<BaseResponse<bool>> ResetPasswordAsync(ResetPasswordRequest request)
+        {
+            try
+            {
+                if (Validator.CheckNull(request) || Validator.CheckString(request.Token) || Validator.CheckString(request.NewPassword))
+                {
+                    return new BaseResponse<bool> { Message = "A reset token and a new password are required.", Status = false, Data = false };
+                }
+
+                if (request.NewPassword.Length < 6)
+                {
+                    return new BaseResponse<bool> { Message = "Your new password must be at least 6 characters.", Status = false, Data = false };
+                }
+
+                var user = await _userRepository.GetByPasswordResetTokenAsync(request.Token.Trim());
+                if (user == null || user.PasswordResetTokenExpiry == null || user.PasswordResetTokenExpiry < DateTime.UtcNow)
+                {
+                    return new BaseResponse<bool> { Message = "This reset link is invalid or has expired.", Status = false, Data = false };
+                }
+
+                user.Password = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+                user.PasswordResetToken = null;
+                user.PasswordResetTokenExpiry = null;
+                await _userRepository.Update(user);
+
+                await _auditLogRepository.CreateAsync(new AuditLog
+                {
+                    EntityName = nameof(User),
+                    EntityId = user.Id,
+                    Action = "PasswordReset",
+                    UserId = user.Id
+                });
+                await _unitOfWork.SaveChangesAsync();
+
+                return new BaseResponse<bool> { Message = "Your password has been reset. You can now sign in.", Status = true, Data = true };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Reset password failed.");
+                return new BaseResponse<bool> { Message = "An error occurred while resetting the password.", Status = false, Data = false };
+            }
+        }
+
+        public async Task<BaseResponse<bool>> VerifyEmailAsync(VerifyEmailRequest request)
+        {
+            try
+            {
+                if (Validator.CheckNull(request) || Validator.CheckString(request.Token))
+                {
+                    return new BaseResponse<bool> { Message = "A verification token is required.", Status = false, Data = false };
+                }
+
+                var user = await _userRepository.GetByEmailVerificationTokenAsync(request.Token.Trim());
+                if (user == null)
+                {
+                    return new BaseResponse<bool> { Message = "This verification link is invalid.", Status = false, Data = false };
+                }
+
+                if (!user.EmailVerified &&
+                    (user.EmailVerificationTokenExpiry == null || user.EmailVerificationTokenExpiry < DateTime.UtcNow))
+                {
+                    return new BaseResponse<bool> { Message = "This verification link has expired. Request a new one.", Status = false, Data = false };
+                }
+
+                user.EmailVerified = true;
+                user.EmailVerificationToken = null;
+                user.EmailVerificationTokenExpiry = null;
+                await _userRepository.Update(user);
+
+                await _auditLogRepository.CreateAsync(new AuditLog
+                {
+                    EntityName = nameof(User),
+                    EntityId = user.Id,
+                    Action = "EmailVerified",
+                    UserId = user.Id
+                });
+                await _unitOfWork.SaveChangesAsync();
+
+                return new BaseResponse<bool> { Message = "Thank you. Your email address is verified.", Status = true, Data = true };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Email verification failed.");
+                return new BaseResponse<bool> { Message = "An error occurred while verifying the email.", Status = false, Data = false };
+            }
+        }
+
+        public async Task<BaseResponse<bool>> ResendVerificationAsync(ResendVerificationRequest request)
+        {
+            try
+            {
+                if (Validator.CheckNull(request) || Validator.CheckString(request.Email))
+                {
+                    return new BaseResponse<bool> { Message = "Email is required.", Status = false, Data = false };
+                }
+
+                var user = await _userRepository.GetUserByEmailAsync(request.Email.Trim());
+
+                if (user != null && !user.EmailVerified)
+                {
+                    user.EmailVerificationToken = GenerateToken();
+                    user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(VerificationTokenHours);
+                    await _userRepository.Update(user);
+                    await SendVerificationEmailAsync(user);
+                }
+
+                return new BaseResponse<bool>
+                {
+                    Message = "If that account still needs verification, a new link has been sent.",
+                    Status = true,
+                    Data = true
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Resend verification failed for {Email}.", request.Email);
+                return new BaseResponse<bool> { Message = "An error occurred while resending the verification email.", Status = false, Data = false };
+            }
+        }
+
+        private static string GenerateToken()
+        {
+            return Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        }
+
+        private string BuildFrontendLink(string path)
+        {
+            var baseUrl = string.IsNullOrWhiteSpace(_emailOptions.FrontendBaseUrl)
+                ? "http://localhost:5173"
+                : _emailOptions.FrontendBaseUrl.TrimEnd('/');
+            return $"{baseUrl}{path}";
+        }
+
+        private async Task SendVerificationEmailAsync(User user)
+        {
+            if (string.IsNullOrWhiteSpace(user.EmailVerificationToken))
+            {
+                return;
+            }
+
+            var link = BuildFrontendLink($"/verify-email?token={user.EmailVerificationToken}");
+            await SafeSendAsync(
+                user.Email,
+                "Verify your Hephzibah Church portal email",
+                EmailTemplates.VerifyEmail(user.DisplayName ?? user.Email, link, VerificationTokenHours));
+        }
+
+        private async Task SafeSendAsync(string to, string subject, string body)
+        {
+            try
+            {
+                await _emailSender.SendAsync(to, subject, body);
+            }
+            catch (Exception ex)
+            {
+                // Email delivery is best-effort; the action still succeeds.
+                _logger.LogError(ex, "Failed to send '{Subject}' email to {To}.", subject, to);
             }
         }
     }

@@ -38,6 +38,22 @@ namespace ChurchPortal.Repositories.Implementattions
                 .FirstOrDefaultAsync(predicate);
         }
 
+        public Task<User?> GetByPasswordResetTokenAsync(string token)
+        {
+            return _context.Set<User>()
+                .Include(a => a.UserRoles)
+                .ThenInclude(a => a.Role)
+                .FirstOrDefaultAsync(a => a.PasswordResetToken == token && !a.IsDeleted);
+        }
+
+        public Task<User?> GetByEmailVerificationTokenAsync(string token)
+        {
+            return _context.Set<User>()
+                .Include(a => a.UserRoles)
+                .ThenInclude(a => a.Role)
+                .FirstOrDefaultAsync(a => a.EmailVerificationToken == token && !a.IsDeleted);
+        }
+
         public Task<List<User>> GetAllUsersAsync()
         {
             return _context.Set<User>()

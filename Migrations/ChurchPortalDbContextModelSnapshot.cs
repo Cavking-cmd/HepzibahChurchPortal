@@ -592,7 +592,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("11111111-1111-1111-1111-111111111111"),
-                            CreatedDate = new DateTime(2026, 10, 23, 0, 5, 52, 395, DateTimeKind.Utc).AddTicks(86),
+                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5742),
                             Description = "Full access to church records, excluding Accounts Payable",
                             IsDeleted = false,
                             Name = "Admin"
@@ -600,7 +600,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("22222222-2222-2222-2222-222222222222"),
-                            CreatedDate = new DateTime(2026, 10, 23, 0, 5, 52, 395, DateTimeKind.Utc).AddTicks(90),
+                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5744),
                             Description = "Manages Services and Attendance records",
                             IsDeleted = false,
                             Name = "AttendanceOfficer"
@@ -608,7 +608,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("33333333-3333-3333-3333-333333333333"),
-                            CreatedDate = new DateTime(2026, 10, 23, 0, 5, 52, 395, DateTimeKind.Utc).AddTicks(91),
+                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5745),
                             Description = "Manages FellowshipCenters and FellowshipAttendance records",
                             IsDeleted = false,
                             Name = "FellowshipLeader"
@@ -616,7 +616,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("44444444-4444-4444-4444-444444444444"),
-                            CreatedDate = new DateTime(2026, 10, 23, 0, 5, 52, 395, DateTimeKind.Utc).AddTicks(92),
+                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5752),
                             Description = "Manages InventoryItem records",
                             IsDeleted = false,
                             Name = "InventoryOfficer"
@@ -624,7 +624,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("55555555-5555-5555-5555-555555555555"),
-                            CreatedDate = new DateTime(2026, 10, 23, 0, 5, 52, 395, DateTimeKind.Utc).AddTicks(97),
+                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5754),
                             Description = "Read-only access (retired)",
                             IsDeleted = false,
                             Name = "Viewer"
@@ -632,7 +632,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("66666666-6666-6666-6666-666666666666"),
-                            CreatedDate = new DateTime(2026, 10, 23, 0, 5, 52, 395, DateTimeKind.Utc).AddTicks(98),
+                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5755),
                             Description = "Submits and tracks personal reimbursement requests",
                             IsDeleted = false,
                             Name = "ChurchMember"
@@ -640,7 +640,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("77777777-7777-7777-7777-777777777777"),
-                            CreatedDate = new DateTime(2026, 10, 23, 0, 5, 52, 395, DateTimeKind.Utc).AddTicks(99),
+                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5756),
                             Description = "Reconciles reimbursement requests and processes payments",
                             IsDeleted = false,
                             Name = "AccountsOfficer"
@@ -648,7 +648,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-                            CreatedDate = new DateTime(2026, 10, 23, 0, 5, 52, 395, DateTimeKind.Utc).AddTicks(100),
+                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5787),
                             Description = "Full access to all church records and Accounts Payable, including approvals",
                             IsDeleted = false,
                             Name = "AccountsAdmin"
@@ -656,7 +656,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
-                            CreatedDate = new DateTime(2026, 10, 23, 0, 5, 52, 395, DateTimeKind.Utc).AddTicks(101),
+                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5788),
                             Description = "Approves reimbursements as Minister in charge and oversees all records",
                             IsDeleted = false,
                             Name = "Pastor"
@@ -721,12 +721,27 @@ namespace ChurchPortal.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("EmailVerificationToken")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("EmailVerificationTokenExpiry")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("EmailVerified")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Password")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("PasswordResetToken")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("PasswordResetTokenExpiry")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -736,10 +751,11 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("99999999-9999-9999-9999-999999999999"),
-                            CreatedDate = new DateTime(2026, 10, 23, 0, 5, 52, 495, DateTimeKind.Utc).AddTicks(3749),
+                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 47, 70, DateTimeKind.Utc).AddTicks(1061),
                             Email = "admin@churchportal.local",
+                            EmailVerified = false,
                             IsDeleted = false,
-                            Password = "$2a$11$IA/Kf/1UlwrH6FBqZpOjTej9h8yD4JhKhMLL99lEtDDqHvOvF0S36"
+                            Password = "$2a$11$4kpw9tTD5xJHilFYZRhLfuhHUNeHOlbFGx6bs5Vr7uyjBuOj7ey4y"
                         });
                 });
 
@@ -815,7 +831,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("88888888-8888-8888-8888-888888888888"),
-                            CreatedDate = new DateTime(2026, 10, 23, 0, 5, 52, 495, DateTimeKind.Utc).AddTicks(3838),
+                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 47, 70, DateTimeKind.Utc).AddTicks(1152),
                             IsDeleted = false,
                             RoleId = new Guid("11111111-1111-1111-1111-111111111111"),
                             UserId = new Guid("99999999-9999-9999-9999-999999999999")

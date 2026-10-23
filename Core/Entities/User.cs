@@ -8,6 +8,12 @@ namespace ChurchPortal.Core.Entities
         public byte[]? AvatarFile { get; set; }
         public string? AvatarMimeType { get; set; }
 
+        public bool EmailVerified { get; set; }
+        public string? EmailVerificationToken { get; set; }
+        public DateTime? EmailVerificationTokenExpiry { get; set; }
+        public string? PasswordResetToken { get; set; }
+        public DateTime? PasswordResetTokenExpiry { get; set; }
+
         public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
         public ICollection<UserCredential> Credentials { get; set; } = new List<UserCredential>();
     }

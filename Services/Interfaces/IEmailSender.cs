@@ -8,6 +8,12 @@ namespace ChurchPortal.Services.Interfaces
         public string? Password { get; set; }
         public string? From { get; set; }
         public bool EnableSsl { get; set; } = true;
+
+        // Resend
+        public string? ResendApiKey { get; set; }
+        public string? ResendFromName { get; set; }
+        public string? FrontendBaseUrl { get; set; }
+        public bool UseResend { get; set; } = true;
     }
 
     public interface IEmailSender

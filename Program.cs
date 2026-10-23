@@ -102,7 +102,7 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
-builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();

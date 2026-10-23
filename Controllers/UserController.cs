@@ -113,5 +113,41 @@ namespace ChurchPortal.Controllers
             if (result.Status) return Ok(result);
             return BadRequest(result);
         }
+
+        [AllowAnonymous]
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest model)
+        {
+            var result = await _userService.ForgotPasswordAsync(model);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        [AllowAnonymous]
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest model)
+        {
+            var result = await _userService.ResetPasswordAsync(model);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        [AllowAnonymous]
+        [HttpPost("verify-email")]
+        public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest model)
+        {
+            var result = await _userService.VerifyEmailAsync(model);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        [AllowAnonymous]
+        [HttpPost("resend-verification")]
+        public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest model)
+        {
+            var result = await _userService.ResendVerificationAsync(model);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
     }
 }

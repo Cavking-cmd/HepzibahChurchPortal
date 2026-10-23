@@ -957,7 +957,7 @@ namespace ChurchPortal.Services.Implementations
                     await _emailSender.SendAsync(
                         user.Email,
                         title,
-                        $"<p>{WebUtility.HtmlEncode(message)}</p><p>Sign in to the church portal to review it.</p>");
+                        EmailTemplates.Notification(title, message, null));
                 }
                 catch
                 {

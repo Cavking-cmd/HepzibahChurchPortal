@@ -8,6 +8,7 @@ namespace ChurchPortal.Core.Dtos.UserDtos
         public required string Email { get; set; }
         public string? DisplayName { get; set; }
         public string? AvatarBase64 { get; set; }
+        public bool EmailVerified { get; set; }
         public List<string> UserRoles { get; set; } = [];
     }
 
@@ -48,6 +49,32 @@ namespace ChurchPortal.Core.Dtos.UserDtos
         public required string CurrentPassword { get; set; }
         [Required]
         public required string NewPassword { get; set; }
+    }
+
+    public class ForgotPasswordRequest
+    {
+        [EmailAddress]
+        public required string Email { get; set; }
+    }
+
+    public class ResetPasswordRequest
+    {
+        [Required]
+        public required string Token { get; set; }
+        [Required]
+        public required string NewPassword { get; set; }
+    }
+
+    public class VerifyEmailRequest
+    {
+        [Required]
+        public required string Token { get; set; }
+    }
+
+    public class ResendVerificationRequest
+    {
+        [EmailAddress]
+        public required string Email { get; set; }
     }
 
     public class LoginResultDto

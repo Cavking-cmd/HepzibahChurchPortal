@@ -13,5 +13,9 @@ namespace ChurchPortal.Services.Interfaces
         Task<BaseResponse<UserDto>> UpdateProfileAsync(Guid userId, UpdateProfileRequest request);
         Task<BaseResponse<UserDto>> UpdateEmailAsync(Guid userId, UpdateEmailRequest request);
         Task<BaseResponse<bool>> UpdatePasswordAsync(Guid userId, UpdatePasswordRequest request);
+        Task<BaseResponse<bool>> ForgotPasswordAsync(ForgotPasswordRequest request);
+        Task<BaseResponse<bool>> ResetPasswordAsync(ResetPasswordRequest request);
+        Task<BaseResponse<bool>> VerifyEmailAsync(VerifyEmailRequest request);
+        Task<BaseResponse<bool>> ResendVerificationAsync(ResendVerificationRequest request);
     }
 }
