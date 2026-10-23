@@ -86,7 +86,7 @@ namespace ChurchPortal.Services.Implementations
                 }
 
                 ApplyTotals(request);
-                request.History.Add(BuildHistory(request.Id, userId, await GetActorNameAsync(userId), "Created", null, ReimbursementStatus.Draft, "Draft created."));
+                await AddHistoryAsync(request, userId, "Created", null, ReimbursementStatus.Draft, "Draft created.");
 
                 await _reimbursementRepository.CreateAsync(request);
                 await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Create", userId));
@@ -144,14 +144,18 @@ namespace ChurchPortal.Services.Implementations
                     request.Items.Add(item);
                 }
 
+                _reimbursementRepository.TrackRangeAsAdded(items);
+
                 foreach (var receipt in receipts)
                 {
                     receipt.ReimbursementRequestId = request.Id;
                     request.Receipts.Add(receipt);
                 }
 
+                _reimbursementRepository.TrackRangeAsAdded(receipts);
+
                 ApplyTotals(request);
-                request.History.Add(BuildHistory(request.Id, userId, await GetActorNameAsync(userId), "Updated", request.Status, request.Status, "Draft updated."));
+                await AddHistoryAsync(request, userId, "Updated", request.Status, request.Status, "Draft updated.");
 
                 await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Update", userId));
                 await _unitOfWork.SaveChangesAsync();
@@ -205,7 +209,7 @@ namespace ChurchPortal.Services.Implementations
                 request.SubmittedDate = DateTime.UtcNow;
                 request.InfoRequestNotes = null;
                 request.RejectionReason = null;
-                request.History.Add(BuildHistory(request.Id, userId, await GetActorNameAsync(userId), "Submitted", fromStatus, ReimbursementStatus.Pending, "Submitted for minister approval."));
+                await AddHistoryAsync(request, userId, "Submitted", fromStatus, ReimbursementStatus.Pending, "Submitted for minister approval.");
 
                 var approvers = await GetUsersByRolesAsync(PastorRole, AccountsAdminRole);
                 await NotifyAsync(approvers, userId, $"Reimbursement {request.RequestNumber} awaiting approval", $"{request.PayeeName} submitted a reimbursement of {FormatMoney(request.TotalAmount)} for approval.", request.Id);
@@ -239,7 +243,7 @@ namespace ChurchPortal.Services.Implementations
                 request.Status = ReimbursementStatus.AccountsReview;
                 request.MinisterApprovedBy = userId;
                 request.MinisterApprovedDate = DateTime.UtcNow;
-                request.History.Add(BuildHistory(request.Id, userId, await GetActorNameAsync(userId), "MinisterApproved", ReimbursementStatus.Pending, ReimbursementStatus.AccountsReview, model.Notes ?? "Approved by minister in charge."));
+                await AddHistoryAsync(request, userId, "MinisterApproved", ReimbursementStatus.Pending, ReimbursementStatus.AccountsReview, model.Notes ?? "Approved by minister in charge.");
 
                 var recipients = await GetUsersByRolesAsync(AccountsOfficerRole, AccountsAdminRole);
                 var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
@@ -284,7 +288,7 @@ namespace ChurchPortal.Services.Implementations
                 var fromStatus = request.Status;
                 request.Status = ReimbursementStatus.InfoRequested;
                 request.InfoRequestNotes = model.Notes.Trim();
-                request.History.Add(BuildHistory(request.Id, userId, await GetActorNameAsync(userId), "InfoRequested", fromStatus, ReimbursementStatus.InfoRequested, model.Notes.Trim()));
+                await AddHistoryAsync(request, userId, "InfoRequested", fromStatus, ReimbursementStatus.InfoRequested, model.Notes.Trim());
 
                 var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
                 if (payee != null)
@@ -326,7 +330,7 @@ namespace ChurchPortal.Services.Implementations
                 var fromStatus = request.Status;
                 request.Status = ReimbursementStatus.Rejected;
                 request.RejectionReason = model.Reason.Trim();
-                request.History.Add(BuildHistory(request.Id, userId, await GetActorNameAsync(userId), "Rejected", fromStatus, ReimbursementStatus.Rejected, model.Reason.Trim()));
+                await AddHistoryAsync(request, userId, "Rejected", fromStatus, ReimbursementStatus.Rejected, model.Reason.Trim());
 
                 var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
                 if (payee != null)
@@ -365,7 +369,7 @@ namespace ChurchPortal.Services.Implementations
                 request.ReviewedBy = request.ReviewedBy ?? userId;
                 request.ReviewedDate = request.ReviewedDate ?? DateTime.UtcNow;
                 request.ApprovedDate = DateTime.UtcNow;
-                request.History.Add(BuildHistory(request.Id, userId, await GetActorNameAsync(userId), "Approved", ReimbursementStatus.AccountsReview, ReimbursementStatus.Approved, model.Notes ?? "Approved for payment."));
+                await AddHistoryAsync(request, userId, "Approved", ReimbursementStatus.AccountsReview, ReimbursementStatus.Approved, model.Notes ?? "Approved for payment.");
 
                 var recipients = await GetUsersByRolesAsync(AccountsOfficerRole);
                 var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
@@ -428,7 +432,7 @@ namespace ChurchPortal.Services.Implementations
                 request.AuthorizedByName2 = model.AuthorizedByName2?.Trim();
                 request.AuthorizationDate = Validator.AsUtc(model.AuthorizationDate);
                 request.FinanceNotes = model.FinanceNotes?.Trim();
-                request.History.Add(BuildHistory(request.Id, userId, await GetActorNameAsync(userId), "Paid", ReimbursementStatus.Approved, ReimbursementStatus.Paid, $"Paid {FormatMoney(model.AmountPaid)} via {request.PaymentMethod}."));
+                await AddHistoryAsync(request, userId, "Paid", ReimbursementStatus.Approved, ReimbursementStatus.Paid, $"Paid {FormatMoney(model.AmountPaid)} via {request.PaymentMethod}.");
 
                 var recipients = await GetUsersByRolesAsync(AccountsAdminRole);
                 var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
@@ -874,6 +878,19 @@ namespace ChurchPortal.Services.Implementations
                     })
                     .ToList()
             };
+        }
+
+        private async Task AddHistoryAsync(
+            ReimbursementRequest request,
+            Guid actorId,
+            string action,
+            ReimbursementStatus? fromStatus,
+            ReimbursementStatus? toStatus,
+            string? notes)
+        {
+            var history = BuildHistory(request.Id, actorId, await GetActorNameAsync(actorId), action, fromStatus, toStatus, notes);
+            request.History.Add(history);
+            _reimbursementRepository.TrackAsAdded(history);
         }
 
         private static ReimbursementHistory BuildHistory(

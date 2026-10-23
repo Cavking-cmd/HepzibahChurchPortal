@@ -30,6 +30,7 @@ namespace ChurchPortal.Repositories.Implementattions
             return _context.ReimbursementRequests
                 .AsNoTracking()
                 .Include(r => r.Items)
+                .Include(r => r.Receipts)
                 .Include(r => r.History)
                 .AsSplitQuery()
                 .Where(predicate)
@@ -43,6 +44,16 @@ namespace ChurchPortal.Repositories.Implementattions
             return _context.ReimbursementReceipts
                 .AsNoTracking()
                 .FirstOrDefaultAsync(r => r.Id == receiptId && !r.IsDeleted);
+        }
+
+        public void TrackAsAdded<TEntity>(TEntity entity) where TEntity : class
+        {
+            _context.Set<TEntity>().Add(entity);
+        }
+
+        public void TrackRangeAsAdded<TEntity>(IEnumerable<TEntity> entities) where TEntity : class
+        {
+            _context.Set<TEntity>().AddRange(entities);
         }
 
         public async Task<Dictionary<Guid, int>> GetReceiptCountsAsync(IReadOnlyCollection<Guid> requestIds)
