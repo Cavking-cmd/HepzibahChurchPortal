@@ -34,6 +34,7 @@ namespace ChurchPortal.Core.Entities
         public string? PaymentMethod { get; set; }
         public string? PaymentReference { get; set; }
 
+        public string? PreparedBy { get; set; }
         public string? ChequeNumber { get; set; }
         public string? AuthorizedByName1 { get; set; }
         public string? AuthorizedByName2 { get; set; }

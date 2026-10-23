@@ -39,6 +39,11 @@ namespace ChurchPortal.Core.Dtos.Request
     public class ReimbursementDecisionModel
     {
         public string? Notes { get; set; }
+        public string? PreparedBy { get; set; }
+        public string? ChequeNumber { get; set; }
+        public string? AuthorizedByName1 { get; set; }
+        public string? AuthorizedByName2 { get; set; }
+        public DateTime? AuthorizationDate { get; set; }
     }
 
     public class RejectReimbursementModel
@@ -57,6 +62,7 @@ namespace ChurchPortal.Core.Dtos.Request
         public decimal AmountPaid { get; set; }
         public required string PaymentMethod { get; set; }
         public string? PaymentReference { get; set; }
+        public string? PreparedBy { get; set; }
         public string? ChequeNumber { get; set; }
         public string? AuthorizedByName1 { get; set; }
         public string? AuthorizedByName2 { get; set; }
@@ -128,6 +134,7 @@ namespace ChurchPortal.Core.Dtos.Request
         public decimal? AmountPaid { get; set; }
         public string? PaymentMethod { get; set; }
         public string? PaymentReference { get; set; }
+        public string? PreparedBy { get; set; }
         public string? ChequeNumber { get; set; }
         public string? AuthorizedByName1 { get; set; }
         public string? AuthorizedByName2 { get; set; }

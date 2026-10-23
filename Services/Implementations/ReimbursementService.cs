@@ -369,6 +369,11 @@ namespace ChurchPortal.Services.Implementations
                 request.ReviewedBy = request.ReviewedBy ?? userId;
                 request.ReviewedDate = request.ReviewedDate ?? DateTime.UtcNow;
                 request.ApprovedDate = DateTime.UtcNow;
+                request.PreparedBy = model.PreparedBy?.Trim();
+                request.ChequeNumber = model.ChequeNumber?.Trim();
+                request.AuthorizedByName1 = model.AuthorizedByName1?.Trim();
+                request.AuthorizedByName2 = model.AuthorizedByName2?.Trim();
+                request.AuthorizationDate = Validator.AsUtc(model.AuthorizationDate);
                 await AddHistoryAsync(request, userId, "Approved", ReimbursementStatus.AccountsReview, ReimbursementStatus.Approved, model.Notes ?? "Approved for payment.");
 
                 var recipients = await GetUsersByRolesAsync(AccountsOfficerRole);
@@ -427,6 +432,7 @@ namespace ChurchPortal.Services.Implementations
                 request.AmountPaid = model.AmountPaid;
                 request.PaymentMethod = model.PaymentMethod.Trim();
                 request.PaymentReference = model.PaymentReference?.Trim();
+                request.PreparedBy = model.PreparedBy?.Trim();
                 request.ChequeNumber = model.ChequeNumber?.Trim();
                 request.AuthorizedByName1 = model.AuthorizedByName1?.Trim();
                 request.AuthorizedByName2 = model.AuthorizedByName2?.Trim();
@@ -825,6 +831,7 @@ namespace ChurchPortal.Services.Implementations
                 AmountPaid = request.AmountPaid,
                 PaymentMethod = request.PaymentMethod,
                 PaymentReference = request.PaymentReference,
+                PreparedBy = request.PreparedBy,
                 ChequeNumber = request.ChequeNumber,
                 AuthorizedByName1 = request.AuthorizedByName1,
                 AuthorizedByName2 = request.AuthorizedByName2,

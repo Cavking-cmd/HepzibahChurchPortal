@@ -94,19 +94,27 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "AccountsAdmin")]
         [HttpPost("{id}/approve")]
         public async Task<IActionResult> Approve(Guid id, [FromBody] ReimbursementDecisionModel model)
         {
+            var roles = CurrentRoles;
+            if (!roles.Contains("AccountsOfficer") && !roles.Contains("AccountsAdmin"))
+            {
+                return Forbid();
+            }
             var result = await _reimbursementService.ApproveAsync(id, model, CurrentUserId);
             if (result.Status) return Ok(result);
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "AccountsOfficer,AccountsAdmin")]
         [HttpPost("{id}/payment")]
         public async Task<IActionResult> RecordPayment(Guid id, [FromBody] RecordReimbursementPaymentModel model)
         {
+            var roles = CurrentRoles;
+            if (!roles.Contains("AccountsOfficer") && !roles.Contains("AccountsAdmin"))
+            {
+                return Forbid();
+            }
             var result = await _reimbursementService.RecordPaymentAsync(id, model, CurrentUserId);
             if (result.Status) return Ok(result);
             return BadRequest(result);

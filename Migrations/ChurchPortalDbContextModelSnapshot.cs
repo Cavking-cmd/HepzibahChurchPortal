@@ -518,6 +518,9 @@ namespace ChurchPortal.Migrations
                     b.Property<string>("PaymentReference")
                         .HasColumnType("text");
 
+                    b.Property<string>("PreparedBy")
+                        .HasColumnType("text");
+
                     b.Property<decimal>("Pst")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -592,7 +595,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("11111111-1111-1111-1111-111111111111"),
-                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5742),
+                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6584),
                             Description = "Full access to church records, excluding Accounts Payable",
                             IsDeleted = false,
                             Name = "Admin"
@@ -600,7 +603,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("22222222-2222-2222-2222-222222222222"),
-                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5744),
+                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6587),
                             Description = "Manages Services and Attendance records",
                             IsDeleted = false,
                             Name = "AttendanceOfficer"
@@ -608,7 +611,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("33333333-3333-3333-3333-333333333333"),
-                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5745),
+                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6588),
                             Description = "Manages FellowshipCenters and FellowshipAttendance records",
                             IsDeleted = false,
                             Name = "FellowshipLeader"
@@ -616,7 +619,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("44444444-4444-4444-4444-444444444444"),
-                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5752),
+                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6596),
                             Description = "Manages InventoryItem records",
                             IsDeleted = false,
                             Name = "InventoryOfficer"
@@ -624,7 +627,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("55555555-5555-5555-5555-555555555555"),
-                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5754),
+                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6597),
                             Description = "Read-only access (retired)",
                             IsDeleted = false,
                             Name = "Viewer"
@@ -632,7 +635,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("66666666-6666-6666-6666-666666666666"),
-                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5755),
+                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6598),
                             Description = "Submits and tracks personal reimbursement requests",
                             IsDeleted = false,
                             Name = "ChurchMember"
@@ -640,7 +643,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("77777777-7777-7777-7777-777777777777"),
-                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5756),
+                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6599),
                             Description = "Reconciles reimbursement requests and processes payments",
                             IsDeleted = false,
                             Name = "AccountsOfficer"
@@ -648,7 +651,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5787),
+                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6600),
                             Description = "Full access to all church records and Accounts Payable, including approvals",
                             IsDeleted = false,
                             Name = "AccountsAdmin"
@@ -656,7 +659,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
-                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 46, 913, DateTimeKind.Utc).AddTicks(5788),
+                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6601),
                             Description = "Approves reimbursements as Minister in charge and oversees all records",
                             IsDeleted = false,
                             Name = "Pastor"
@@ -751,11 +754,11 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("99999999-9999-9999-9999-999999999999"),
-                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 47, 70, DateTimeKind.Utc).AddTicks(1061),
+                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 10, 118, DateTimeKind.Utc).AddTicks(6449),
                             Email = "admin@churchportal.local",
                             EmailVerified = false,
                             IsDeleted = false,
-                            Password = "$2a$11$4kpw9tTD5xJHilFYZRhLfuhHUNeHOlbFGx6bs5Vr7uyjBuOj7ey4y"
+                            Password = "$2a$11$DAHWuYQsHuWSJYmzcTBOnuBcgJW9iTBbmwl1XGUgfca/T9dr9mcwe"
                         });
                 });
 
@@ -831,7 +834,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("88888888-8888-8888-8888-888888888888"),
-                            CreatedDate = new DateTime(2026, 10, 23, 1, 26, 47, 70, DateTimeKind.Utc).AddTicks(1152),
+                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 10, 118, DateTimeKind.Utc).AddTicks(6654),
                             IsDeleted = false,
                             RoleId = new Guid("11111111-1111-1111-1111-111111111111"),
                             UserId = new Guid("99999999-9999-9999-9999-999999999999")
