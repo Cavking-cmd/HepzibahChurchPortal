@@ -156,58 +156,114 @@ export function UsersSection() {
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Create User</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Plus className="h-5 w-5" />
+              Create New User Account
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Add a new user to the church portal and assign their roles and permissions.
+            </p>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="user@churchportal.local"
-              />
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-medium">
+                  Email Address
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="user@example.com"
+                  className="h-10"
+                />
+                <p className="text-xs text-muted-foreground">This will be used for login credentials.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-sm font-medium">
+                  Password
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  minLength={6}
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  placeholder="Enter a secure password"
+                  className="h-10"
+                />
+                <p className="text-xs text-muted-foreground">Must be at least 6 characters long.</p>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                minLength={6}
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder="At least 6 characters"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Roles</Label>
-              <div className="flex flex-wrap gap-2">
+
+            <div className="space-y-3">
+              <div>
+                <Label className="text-sm font-medium">Assign Roles</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Select one or more roles to define what this user can access.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {ALL_ROLES.map((role) => (
                   <button
                     key={role}
                     type="button"
                     onClick={() => toggleRole(role)}
                     className={cn(
-                      "inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors",
+                      "relative flex items-start gap-2 rounded-lg border p-3 text-left transition-all hover:shadow-sm",
                       roles.includes(role)
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : "border-border bg-card hover:bg-muted/50",
                     )}
                   >
-                    {role}
+                    <div
+                      className={cn(
+                        "mt-0.5 h-4 w-4 rounded-full border-2 transition-colors",
+                        roles.includes(role)
+                          ? "border-primary bg-primary"
+                          : "border-muted-foreground/30",
+                      )}
+                    >
+                      {roles.includes(role) && (
+                        <div className="h-full w-full flex items-center justify-center">
+                          <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">{role}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {role === "Admin" && "Full system access"}
+                        {role === "AttendanceOfficer" && "Manage services & attendance"}
+                        {role === "FellowshipLeader" && "Manage fellowship centers & attendance"}
+                        {role === "InventoryOfficer" && "Manage inventory items"}
+                        {role === "Viewer" && "Read-only access"}
+                      </div>
+                    </div>
                   </button>
                 ))}
               </div>
+              {roles.length === 0 && (
+                <p className="text-xs text-destructive">Please select at least one role.</p>
+              )}
             </div>
 
-            <DialogFooter>
-              <Button type="submit" disabled={saving}>
-                {saving ? "Creating…" : "Create User"}
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saving || roles.length === 0}>
+                {saving ? "Creating Account..." : "Create Account"}
               </Button>
             </DialogFooter>
           </form>
