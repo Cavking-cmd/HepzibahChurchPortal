@@ -20,6 +20,15 @@ namespace ChurchPortal.Services.Interfaces
         public const string DefaultFrontendBaseUrl = "https://hepzibahreactrepo.vercel.app";
     }
 
+    /// <summary>
+    /// Thrown when a message could not be delivered. The message is safe to
+    /// show to the signed-in user (it never contains the API key).
+    /// </summary>
+    public class EmailDeliveryException : Exception
+    {
+        public EmailDeliveryException(string message, Exception? inner = null) : base(message, inner) { }
+    }
+
     public interface IEmailSender
     {
         /// <summary>

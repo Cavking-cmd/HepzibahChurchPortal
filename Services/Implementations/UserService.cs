@@ -4,6 +4,7 @@ using ChurchPortal.Core.Dtos.UserDtos;
 using ChurchPortal.Core.Entities;
 using ChurchPortal.Repositories.Interfaces;
 using ChurchPortal.Services.Interfaces;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -13,6 +14,7 @@ namespace ChurchPortal.Services.Implementations
     {
         private const int VerificationTokenHours = 48;
         private const int ResetTokenHours = 2;
+        private static readonly TimeSpan ResendCooldown = TimeSpan.FromSeconds(60);
 
         private readonly IUserRepository _userRepository;
         private readonly IRoleRepository _roleRepository;
@@ -22,6 +24,7 @@ namespace ChurchPortal.Services.Implementations
         private readonly IEmailSender _emailSender;
         private readonly EmailOptions _emailOptions;
         private readonly ILogger<UserService> _logger;
+        private readonly IMemoryCache _cache;
 
         private const int MaxAvatarBytes = 2 * 1024 * 1024;
 
@@ -33,7 +36,8 @@ namespace ChurchPortal.Services.Implementations
             IUnitOfWork unitOfWork,
             IEmailSender emailSender,
             IOptions<EmailOptions> emailOptions,
-            ILogger<UserService> logger)
+            ILogger<UserService> logger,
+            IMemoryCache cache)
         {
             _userRepository = userRepository;
             _roleRepository = roleRepository;
@@ -43,6 +47,7 @@ namespace ChurchPortal.Services.Implementations
             _emailSender = emailSender;
             _emailOptions = emailOptions.Value;
             _logger = logger;
+            _cache = cache;
         }
 
         private static UserDto ToDto(User user) => new UserDto
@@ -160,11 +165,15 @@ namespace ChurchPortal.Services.Implementations
                 }
                 await _unitOfWork.SaveChangesAsync();
 
-                await SendVerificationEmailAsync(user);
+                var emailError = _emailSender.IsConfigured
+                    ? await SendVerificationEmailAsync(user)
+                    : "Email delivery is not configured on the server.";
 
                 return new BaseResponse<UserDto>
                 {
-                    Message = "User registered successfully. A verification email has been sent.",
+                    Message = emailError == null
+                        ? $"User registered successfully. A verification email has been sent to {user.Email}."
+                        : $"User registered successfully, but the verification email to {user.Email} was not sent: {emailError} They can resend it from Settings once email is working.",
                     Status = true,
                     Data = new UserDto
                     {
@@ -508,7 +517,7 @@ namespace ChurchPortal.Services.Implementations
             }
         }
 
-        public async Task<BaseResponse<VerificationEmailSentDto>> ResendVerificationAsync(Guid userId)
+        public async Task<BaseResponse<VerificationEmailSentDto>> ResendVerificationAsync(Guid userId, ResendVerificationRequest? request)
         {
             try
             {
@@ -531,6 +540,29 @@ namespace ChurchPortal.Services.Implementations
                     };
                 }
 
+                // Extra check: the person must type the address the link is going to.
+                // It has to match the signed-in account, so a borrowed session or a
+                // mistyped address cannot trigger mail to the wrong inbox unnoticed.
+                var confirmEmail = request?.ConfirmEmail?.Trim();
+                if (string.IsNullOrWhiteSpace(confirmEmail))
+                {
+                    return new BaseResponse<VerificationEmailSentDto>
+                    {
+                        Message = "Please type your email address to confirm where the link should go.",
+                        Status = false
+                    };
+                }
+
+                if (!string.Equals(confirmEmail, user.Email.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning("Resend verification refused for user {UserId}: confirmation address did not match.", userId);
+                    return new BaseResponse<VerificationEmailSentDto>
+                    {
+                        Message = "That address does not match the email on your account. Check it and try again.",
+                        Status = false
+                    };
+                }
+
                 if (user.EmailVerified)
                 {
                     return new BaseResponse<VerificationEmailSentDto>
@@ -541,25 +573,51 @@ namespace ChurchPortal.Services.Implementations
                     };
                 }
 
+                var cooldownKey = $"resend-verification:{user.Id}";
+                if (_cache.TryGetValue(cooldownKey, out DateTime lastSentUtc))
+                {
+                    var wait = (int)Math.Ceiling((lastSentUtc + ResendCooldown - DateTime.UtcNow).TotalSeconds);
+                    if (wait > 0)
+                    {
+                        return new BaseResponse<VerificationEmailSentDto>
+                        {
+                            Message = $"A verification email was just sent to {user.Email}. Please wait {wait} seconds before asking for another.",
+                            Status = false
+                        };
+                    }
+                }
+
                 user.EmailVerificationToken = GenerateToken();
                 user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(VerificationTokenHours);
                 await _userRepository.Update(user);
 
-                var sent = await SendVerificationEmailAsync(user);
-                if (!sent)
+                var error = await SendVerificationEmailAsync(user);
+                if (error != null)
                 {
                     return new BaseResponse<VerificationEmailSentDto>
                     {
-                        Message = "The verification email could not be sent. Please try again in a moment.",
+                        Message = $"The verification email to {user.Email} could not be sent. {error}",
                         Status = false
                     };
                 }
+
+                var sentAt = DateTime.UtcNow;
+                _cache.Set(cooldownKey, sentAt, ResendCooldown);
+
+                await _auditLogRepository.CreateAsync(new AuditLog
+                {
+                    EntityName = nameof(User),
+                    EntityId = user.Id,
+                    Action = "VerificationEmailResent",
+                    UserId = user.Id
+                });
+                await _unitOfWork.SaveChangesAsync();
 
                 return new BaseResponse<VerificationEmailSentDto>
                 {
                     Message = $"Verification email sent to {user.Email}.",
                     Status = true,
-                    Data = new VerificationEmailSentDto { Email = user.Email, SentAtUtc = DateTime.UtcNow }
+                    Data = new VerificationEmailSentDto { Email = user.Email, SentAtUtc = sentAt }
                 };
             }
             catch (Exception ex)
@@ -615,16 +673,16 @@ namespace ChurchPortal.Services.Implementations
                     };
                 }
 
-                var sent = await SafeSendAsync(
+                var error = await SafeSendAsync(
                     user.Email,
                     "Hephzibah Church portal test email",
                     EmailTemplates.TestEmail(user.DisplayName ?? user.Email));
 
-                if (!sent)
+                if (error != null)
                 {
                     return new BaseResponse<VerificationEmailSentDto>
                     {
-                        Message = "The test email could not be sent. Check the server email configuration.",
+                        Message = $"The test email to {user.Email} could not be sent. {error}",
                         Status = false
                     };
                 }
@@ -660,11 +718,12 @@ namespace ChurchPortal.Services.Implementations
             return $"{baseUrl}{path}";
         }
 
-        private async Task<bool> SendVerificationEmailAsync(User user)
+        /// <returns>null when the message was accepted, otherwise the reason it failed.</returns>
+        private async Task<string?> SendVerificationEmailAsync(User user)
         {
             if (string.IsNullOrWhiteSpace(user.EmailVerificationToken))
             {
-                return false;
+                return "No verification token was generated.";
             }
 
             var link = BuildFrontendLink($"/verify-email?token={user.EmailVerificationToken}");
@@ -674,17 +733,23 @@ namespace ChurchPortal.Services.Implementations
                 EmailTemplates.VerifyEmail(user.DisplayName ?? user.Email, link, VerificationTokenHours));
         }
 
-        private async Task<bool> SafeSendAsync(string to, string subject, string body)
+        /// <returns>null when the message was accepted, otherwise the reason it failed.</returns>
+        private async Task<string?> SafeSendAsync(string to, string subject, string body)
         {
             try
             {
                 await _emailSender.SendAsync(to, subject, body);
-                return true;
+                return null;
+            }
+            catch (EmailDeliveryException ex)
+            {
+                _logger.LogError(ex, "Failed to send '{Subject}' email to {To}.", subject, to);
+                return ex.Message;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send '{Subject}' email to {To}.", subject, to);
-                return false;
+                return "Email delivery is not available right now. Please try again later.";
             }
         }
     }

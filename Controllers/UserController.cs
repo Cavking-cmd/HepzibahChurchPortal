@@ -143,14 +143,14 @@ namespace ChurchPortal.Controllers
 
         [Authorize]
         [HttpPost("resend-verification")]
-        public async Task<IActionResult> ResendVerification()
+        public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest? model)
         {
-            var result = await _userService.ResendVerificationAsync(CurrentUserId);
+            var result = await _userService.ResendVerificationAsync(CurrentUserId, model);
             if (result.Status) return Ok(result);
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,AccountsAdmin")]
         [HttpGet("email-status")]
         public IActionResult EmailStatus()
         {

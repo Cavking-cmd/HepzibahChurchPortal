@@ -966,9 +966,10 @@ namespace ChurchPortal.Services.Implementations
                         title,
                         EmailTemplates.Notification(title, message, null));
                 }
-                catch
+                catch (Exception ex)
                 {
                     // Email delivery is best-effort; the in-app notification is still recorded.
+                    Console.WriteLine($"[email] Notification '{title}' to {user.Email} failed: {ex.Message}");
                 }
             }
         }

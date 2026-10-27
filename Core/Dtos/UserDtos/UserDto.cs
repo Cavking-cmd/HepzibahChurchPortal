@@ -71,6 +71,12 @@ namespace ChurchPortal.Core.Dtos.UserDtos
         public required string Token { get; set; }
     }
 
+    public class ResendVerificationRequest
+    {
+        /// <summary>The address the user typed to confirm; must match the account email.</summary>
+        public string? ConfirmEmail { get; set; }
+    }
+
     public class VerificationEmailSentDto
     {
         public required string Email { get; set; }

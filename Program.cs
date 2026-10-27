@@ -11,6 +11,12 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 
+// ASP.NET Core never reads .env files on its own, so the Resend key that lives
+// in .env was invisible to the app when it ran locally. Load it here, before
+// the builder reads configuration. Variables that are already set (for
+// example in the Render dashboard) always win over the file.
+DotEnv.Load(Path.Combine(Directory.GetCurrentDirectory(), ".env"));
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers()

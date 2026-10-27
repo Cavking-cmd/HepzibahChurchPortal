@@ -16,7 +16,7 @@ namespace ChurchPortal.Services.Interfaces
         Task<BaseResponse<bool>> ForgotPasswordAsync(ForgotPasswordRequest request);
         Task<BaseResponse<bool>> ResetPasswordAsync(ResetPasswordRequest request);
         Task<BaseResponse<bool>> VerifyEmailAsync(VerifyEmailRequest request);
-        Task<BaseResponse<VerificationEmailSentDto>> ResendVerificationAsync(Guid userId);
+        Task<BaseResponse<VerificationEmailSentDto>> ResendVerificationAsync(Guid userId, ResendVerificationRequest? request);
         BaseResponse<EmailStatusDto> GetEmailStatus();
         Task<BaseResponse<VerificationEmailSentDto>> SendTestEmailAsync(Guid userId);
     }

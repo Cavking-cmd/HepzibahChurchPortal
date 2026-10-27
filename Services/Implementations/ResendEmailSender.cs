@@ -64,18 +64,53 @@ namespace ChurchPortal.Services.Implementations
                 {
                     var error = await response.Content.ReadAsStringAsync();
                     _logger.LogError("Resend rejected the email to {To} ({Status}): {Error}", to, (int)response.StatusCode, error);
-                    throw new InvalidOperationException(
-                        $"The email provider rejected the message ({(int)response.StatusCode}). Check the sender domain and API key.");
+                    throw new EmailDeliveryException(
+                        $"The email provider rejected the message ({(int)response.StatusCode}): {ReadResendError(error)}");
                 }
 
                 var result = await response.Content.ReadFromJsonAsync<ResendEmailResponse>();
                 _logger.LogInformation("Resend accepted email to {To}; id={Id}.", to, result?.Id);
             }
+            catch (EmailDeliveryException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send email to {To} via Resend.", to);
-                throw;
+                throw new EmailDeliveryException(
+                    "The server could not reach the email provider. Please try again in a moment.", ex);
             }
+        }
+
+        /// <summary>
+        /// Resend answers errors as {"statusCode":403,"name":"...","message":"..."}.
+        /// Pull out the human-readable message so the real reason (unverified
+        /// domain, invalid key, bad recipient) reaches the person, not just a code.
+        /// </summary>
+        private static string ReadResendError(string body)
+        {
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return "no details were returned.";
+            }
+
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                    doc.RootElement.TryGetProperty("message", out var message) &&
+                    message.ValueKind == JsonValueKind.String)
+                {
+                    return message.GetString() ?? body;
+                }
+            }
+            catch (JsonException)
+            {
+                // Not JSON; fall through to the raw text.
+            }
+
+            return body.Length > 300 ? body[..300] : body;
         }
 
         private sealed class ResendEmailRequest
