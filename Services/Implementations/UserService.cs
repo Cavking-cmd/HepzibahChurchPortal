@@ -365,6 +365,16 @@ namespace ChurchPortal.Services.Implementations
                     return new BaseResponse<bool> { Message = "Email is required.", Status = false, Data = false };
                 }
 
+                if (!_emailSender.IsConfigured)
+                {
+                    return new BaseResponse<bool>
+                    {
+                        Message = "Email delivery is not configured on the server. Ask an administrator to add a Resend API key.",
+                        Status = false,
+                        Data = false
+                    };
+                }
+
                 var user = await _userRepository.GetUserByEmailAsync(request.Email.Trim());
 
                 // Always report success so the endpoint cannot be used to enumerate accounts.
@@ -498,36 +508,142 @@ namespace ChurchPortal.Services.Implementations
             }
         }
 
-        public async Task<BaseResponse<bool>> ResendVerificationAsync(ResendVerificationRequest request)
+        public async Task<BaseResponse<VerificationEmailSentDto>> ResendVerificationAsync(Guid userId)
         {
             try
             {
-                if (Validator.CheckNull(request) || Validator.CheckString(request.Email))
+                if (!_emailSender.IsConfigured)
                 {
-                    return new BaseResponse<bool> { Message = "Email is required.", Status = false, Data = false };
+                    return new BaseResponse<VerificationEmailSentDto>
+                    {
+                        Message = "Email delivery is not configured on the server. Ask an administrator to add a Resend API key.",
+                        Status = false
+                    };
                 }
 
-                var user = await _userRepository.GetUserByEmailAsync(request.Email.Trim());
-
-                if (user != null && !user.EmailVerified)
+                var user = await _userRepository.GetByIdAsync(userId);
+                if (user == null || user.IsDeleted)
                 {
-                    user.EmailVerificationToken = GenerateToken();
-                    user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(VerificationTokenHours);
-                    await _userRepository.Update(user);
-                    await SendVerificationEmailAsync(user);
+                    return new BaseResponse<VerificationEmailSentDto>
+                    {
+                        Message = "We could not find your account.",
+                        Status = false
+                    };
                 }
 
-                return new BaseResponse<bool>
+                if (user.EmailVerified)
                 {
-                    Message = "If that account still needs verification, a new link has been sent.",
+                    return new BaseResponse<VerificationEmailSentDto>
+                    {
+                        Message = "This email address is already verified.",
+                        Status = true,
+                        Data = new VerificationEmailSentDto { Email = user.Email, SentAtUtc = DateTime.UtcNow }
+                    };
+                }
+
+                user.EmailVerificationToken = GenerateToken();
+                user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(VerificationTokenHours);
+                await _userRepository.Update(user);
+
+                var sent = await SendVerificationEmailAsync(user);
+                if (!sent)
+                {
+                    return new BaseResponse<VerificationEmailSentDto>
+                    {
+                        Message = "The verification email could not be sent. Please try again in a moment.",
+                        Status = false
+                    };
+                }
+
+                return new BaseResponse<VerificationEmailSentDto>
+                {
+                    Message = $"Verification email sent to {user.Email}.",
                     Status = true,
-                    Data = true
+                    Data = new VerificationEmailSentDto { Email = user.Email, SentAtUtc = DateTime.UtcNow }
                 };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Resend verification failed for {Email}.", request.Email);
-                return new BaseResponse<bool> { Message = "An error occurred while resending the verification email.", Status = false, Data = false };
+                _logger.LogError(ex, "Resend verification failed for user {UserId}.", userId);
+                return new BaseResponse<VerificationEmailSentDto>
+                {
+                    Message = "An error occurred while resending the verification email.",
+                    Status = false
+                };
+            }
+        }
+
+        public BaseResponse<EmailStatusDto> GetEmailStatus()
+        {
+            return new BaseResponse<EmailStatusDto>
+            {
+                Message = _emailSender.IsConfigured
+                    ? "Email delivery is configured."
+                    : "Email delivery is not configured.",
+                Status = true,
+                Data = new EmailStatusDto
+                {
+                    Configured = _emailSender.IsConfigured,
+                    Provider = "Resend",
+                    From = _emailOptions.From,
+                    FromName = _emailOptions.ResendFromName,
+                    FrontendBaseUrl = _emailOptions.FrontendBaseUrl
+                }
+            };
+        }
+
+        public async Task<BaseResponse<VerificationEmailSentDto>> SendTestEmailAsync(Guid userId)
+        {
+            try
+            {
+                if (!_emailSender.IsConfigured)
+                {
+                    return new BaseResponse<VerificationEmailSentDto>
+                    {
+                        Message = "Email delivery is not configured on the server. Ask an administrator to add a Resend API key.",
+                        Status = false
+                    };
+                }
+
+                var user = await _userRepository.GetByIdAsync(userId);
+                if (user == null || user.IsDeleted)
+                {
+                    return new BaseResponse<VerificationEmailSentDto>
+                    {
+                        Message = "We could not find your account.",
+                        Status = false
+                    };
+                }
+
+                var sent = await SafeSendAsync(
+                    user.Email,
+                    "Hephzibah Church portal test email",
+                    EmailTemplates.TestEmail(user.DisplayName ?? user.Email));
+
+                if (!sent)
+                {
+                    return new BaseResponse<VerificationEmailSentDto>
+                    {
+                        Message = "The test email could not be sent. Check the server email configuration.",
+                        Status = false
+                    };
+                }
+
+                return new BaseResponse<VerificationEmailSentDto>
+                {
+                    Message = $"Test email sent to {user.Email}.",
+                    Status = true,
+                    Data = new VerificationEmailSentDto { Email = user.Email, SentAtUtc = DateTime.UtcNow }
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Test email failed for user {UserId}.", userId);
+                return new BaseResponse<VerificationEmailSentDto>
+                {
+                    Message = "An error occurred while sending the test email.",
+                    Status = false
+                };
             }
         }
 
@@ -544,30 +660,31 @@ namespace ChurchPortal.Services.Implementations
             return $"{baseUrl}{path}";
         }
 
-        private async Task SendVerificationEmailAsync(User user)
+        private async Task<bool> SendVerificationEmailAsync(User user)
         {
             if (string.IsNullOrWhiteSpace(user.EmailVerificationToken))
             {
-                return;
+                return false;
             }
 
             var link = BuildFrontendLink($"/verify-email?token={user.EmailVerificationToken}");
-            await SafeSendAsync(
+            return await SafeSendAsync(
                 user.Email,
                 "Verify your Hephzibah Church portal email",
                 EmailTemplates.VerifyEmail(user.DisplayName ?? user.Email, link, VerificationTokenHours));
         }
 
-        private async Task SafeSendAsync(string to, string subject, string body)
+        private async Task<bool> SafeSendAsync(string to, string subject, string body)
         {
             try
             {
                 await _emailSender.SendAsync(to, subject, body);
+                return true;
             }
             catch (Exception ex)
             {
-                // Email delivery is best-effort; the action still succeeds.
                 _logger.LogError(ex, "Failed to send '{Subject}' email to {To}.", subject, to);
+                return false;
             }
         }
     }

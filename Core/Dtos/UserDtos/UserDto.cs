@@ -71,10 +71,19 @@ namespace ChurchPortal.Core.Dtos.UserDtos
         public required string Token { get; set; }
     }
 
-    public class ResendVerificationRequest
+    public class VerificationEmailSentDto
     {
-        [EmailAddress]
         public required string Email { get; set; }
+        public DateTime SentAtUtc { get; set; }
+    }
+
+    public class EmailStatusDto
+    {
+        public bool Configured { get; set; }
+        public string Provider { get; set; } = "Resend";
+        public string? From { get; set; }
+        public string? FromName { get; set; }
+        public string? FrontendBaseUrl { get; set; }
     }
 
     public class LoginResultDto

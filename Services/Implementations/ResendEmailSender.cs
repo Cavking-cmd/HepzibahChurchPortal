@@ -23,24 +23,26 @@ namespace ChurchPortal.Services.Implementations
             _logger = logger;
         }
 
+        public bool IsConfigured =>
+            !string.IsNullOrWhiteSpace(_options.ResendApiKey) &&
+            !string.IsNullOrWhiteSpace(_options.From);
+
         public async Task SendAsync(string to, string subject, string body)
         {
-            if (string.IsNullOrWhiteSpace(_options.ResendApiKey))
+            if (!IsConfigured)
             {
-                _logger.LogWarning("Resend API key is not configured; skipping email to {To}.", to);
-                return;
+                _logger.LogError(
+                    "Cannot send '{Subject}' to {To}: Resend is not configured (missing Email:ResendApiKey or Email:From).",
+                    subject,
+                    to);
+                throw new InvalidOperationException(
+                    "Email delivery is not configured on the server. Set a Resend API key (RESEND_API_KEY) and try again.");
             }
 
-            if (string.IsNullOrWhiteSpace(_options.From))
-            {
-                _logger.LogWarning("Email From address is not configured; skipping email to {To}.", to);
-                return;
-            }
-
+            var fromAddress = _options.From!;
             var from = string.IsNullOrWhiteSpace(_options.ResendFromName)
-                ? _options.From
-                : $"{_options.ResendFromName} <{_options.From}>";
-
+                ? fromAddress
+                : $"{_options.ResendFromName} <{fromAddress}>";
             var payload = new ResendEmailRequest
             {
                 From = from,
@@ -62,7 +64,8 @@ namespace ChurchPortal.Services.Implementations
                 {
                     var error = await response.Content.ReadAsStringAsync();
                     _logger.LogError("Resend rejected the email to {To} ({Status}): {Error}", to, (int)response.StatusCode, error);
-                    return;
+                    throw new InvalidOperationException(
+                        $"The email provider rejected the message ({(int)response.StatusCode}). Check the sender domain and API key.");
                 }
 
                 var result = await response.Content.ReadFromJsonAsync<ResendEmailResponse>();

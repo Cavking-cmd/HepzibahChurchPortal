@@ -6,6 +6,7 @@ using ChurchPortal.Services.Implementations;
 using ChurchPortal.Services.Interfaces;
 using Fido2NetLib;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
@@ -102,6 +103,31 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+builder.Services.PostConfigure<EmailOptions>(options =>
+{
+    // Accept the common flat environment variable names so a single
+    // RESEND_API_KEY is enough to turn email on in production.
+    if (string.IsNullOrWhiteSpace(options.ResendApiKey))
+    {
+        options.ResendApiKey = builder.Configuration["RESEND_API_KEY"]
+            ?? builder.Configuration["Resend:ApiKey"];
+    }
+
+    if (string.IsNullOrWhiteSpace(options.From))
+    {
+        options.From = EmailOptions.DefaultFrom;
+    }
+
+    if (string.IsNullOrWhiteSpace(options.ResendFromName))
+    {
+        options.ResendFromName = EmailOptions.DefaultFromName;
+    }
+
+    if (string.IsNullOrWhiteSpace(options.FrontendBaseUrl))
+    {
+        options.FrontendBaseUrl = EmailOptions.DefaultFrontendBaseUrl;
+    }
+});
 builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -120,6 +146,16 @@ builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 var app = builder.Build();
+
+using (var startupScope = app.Services.CreateScope())
+{
+    var emailSender = startupScope.ServiceProvider.GetRequiredService<IEmailSender>();
+    var emailOptions = startupScope.ServiceProvider.GetRequiredService<IOptions<EmailOptions>>().Value;
+    app.Logger.LogInformation(
+        "Email delivery configured: {Configured} (from: {From})",
+        emailSender.IsConfigured,
+        emailOptions.From);
+}
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider

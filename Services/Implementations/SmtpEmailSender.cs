@@ -14,14 +14,18 @@ namespace ChurchPortal.Services.Implementations
             _options = options.Value;
         }
 
+        public bool IsConfigured =>
+            !string.IsNullOrWhiteSpace(_options.Host) && !string.IsNullOrWhiteSpace(_options.From);
+
         public async Task SendAsync(string to, string subject, string body)
         {
-            if (string.IsNullOrWhiteSpace(_options.Host) || string.IsNullOrWhiteSpace(_options.From))
+            if (!IsConfigured)
             {
-                return;
+                throw new InvalidOperationException(
+                    "Email delivery is not configured on the server. Set an SMTP host and From address and try again.");
             }
 
-            using var client = new SmtpClient(_options.Host, _options.Port)
+            using var client = new SmtpClient(_options.Host!, _options.Port)
             {
                 EnableSsl = _options.EnableSsl
             };
@@ -31,7 +35,7 @@ namespace ChurchPortal.Services.Implementations
                 client.Credentials = new NetworkCredential(_options.Username, _options.Password);
             }
 
-            using var message = new MailMessage(_options.From, to, subject, body)
+            using var message = new MailMessage(_options.From!, to, subject, body)
             {
                 IsBodyHtml = true
             };

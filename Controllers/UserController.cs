@@ -141,11 +141,27 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [AllowAnonymous]
+        [Authorize]
         [HttpPost("resend-verification")]
-        public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest model)
+        public async Task<IActionResult> ResendVerification()
         {
-            var result = await _userService.ResendVerificationAsync(model);
+            var result = await _userService.ResendVerificationAsync(CurrentUserId);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpGet("email-status")]
+        public IActionResult EmailStatus()
+        {
+            return Ok(_userService.GetEmailStatus());
+        }
+
+        [Authorize]
+        [HttpPost("test-email")]
+        public async Task<IActionResult> TestEmail()
+        {
+            var result = await _userService.SendTestEmailAsync(CurrentUserId);
             if (result.Status) return Ok(result);
             return BadRequest(result);
         }

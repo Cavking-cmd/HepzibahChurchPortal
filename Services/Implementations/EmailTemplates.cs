@@ -31,8 +31,18 @@ namespace ChurchPortal.Services.Implementations
                 safeLink);
         }
 
-        public static string Notification(string title, string message, string? link)
+        public static string TestEmail(string name)
         {
+            var safeName = WebUtility.HtmlEncode(name);
+            return Wrap(
+                "Email delivery is working",
+                $"<p>Hello {safeName},</p>" +
+                "<p>This is a test message from the RCCG Hephzibah Parish portal. " +
+                "If you can read this, the portal can send email to your address.</p>",
+                null);
+        }
+
+        public static string Notification(string title, string message, string? link)        {
             var body = $"<p>{WebUtility.HtmlEncode(message)}</p>";
             if (!string.IsNullOrWhiteSpace(link))
             {

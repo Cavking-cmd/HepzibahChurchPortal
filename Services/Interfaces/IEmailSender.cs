@@ -14,10 +14,21 @@ namespace ChurchPortal.Services.Interfaces
         public string? ResendFromName { get; set; }
         public string? FrontendBaseUrl { get; set; }
         public bool UseResend { get; set; } = true;
+
+        public const string DefaultFrom = "notifications@updates.rccghephzibahmanitoba.org";
+        public const string DefaultFromName = "Hephzibah Church";
+        public const string DefaultFrontendBaseUrl = "https://hepzibahreactrepo.vercel.app";
     }
 
     public interface IEmailSender
     {
+        /// <summary>
+        /// True when the sender has everything it needs to deliver a message.
+        /// Callers should surface this to the user instead of pretending an
+        /// email was sent.
+        /// </summary>
+        bool IsConfigured { get; }
+
         Task SendAsync(string to, string subject, string body);
     }
 }
