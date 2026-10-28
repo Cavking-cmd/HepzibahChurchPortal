@@ -6,9 +6,13 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ChurchPortal.Controllers
 {
+    /// <summary>
+    /// Role gates here are the first check; the service checks roles, ownership and
+    /// the current status again before changing anything.
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize(Roles = "ChurchMember,AccountsOfficer,AccountsAdmin,Pastor")]
+    [Authorize(Roles = "ChurchMember,AccountsOfficer,AccountsAdmin")]
     public class ReimbursementsController : ControllerBase
     {
         private readonly IReimbursementService _reimbursementService;
@@ -39,7 +43,18 @@ namespace ChurchPortal.Controllers
             return NotFound(result);
         }
 
-        [Authorize(Roles = "ChurchMember,AccountsAdmin")]
+        /// <summary>Budget position and projection for a request. Optional ?amount= to preview a different approved amount.</summary>
+        [Authorize(Roles = "AccountsOfficer,AccountsAdmin")]
+        [HttpGet("{id}/budget")]
+        public async Task<IActionResult> Budget(Guid id, [FromQuery] decimal? amount = null)
+        {
+            var result = await _reimbursementService.GetBudgetAsync(id, amount, CurrentUserId, CurrentRoles);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        // ---------------- Member (own requests only) ----------------
+
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateReimbursementRequestModel model)
         {
@@ -48,17 +63,15 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "ChurchMember,AccountsAdmin")]
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateReimbursementRequestModel model)
         {
-            if (id != model.Id) return BadRequest("Route id and body id must match.");
+            if (id != model.Id) return BadRequest(new { message = "Route id and body id must match.", status = false });
             var result = await _reimbursementService.UpdateDraftAsync(model, CurrentUserId);
             if (result.Status) return Ok(result);
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "ChurchMember,AccountsAdmin")]
         [HttpPost("{id}/submit")]
         public async Task<IActionResult> Submit(Guid id)
         {
@@ -67,65 +80,69 @@ namespace ChurchPortal.Controllers
             return BadRequest(result);
         }
 
-        [Authorize(Roles = "Pastor,AccountsAdmin")]
-        [HttpPost("{id}/minister-approve")]
-        public async Task<IActionResult> MinisterApprove(Guid id, [FromBody] ReimbursementDecisionModel model)
-        {
-            var result = await _reimbursementService.MinisterApproveAsync(id, model, CurrentUserId);
-            if (result.Status) return Ok(result);
-            return BadRequest(result);
-        }
-
-        [Authorize(Roles = "AccountsOfficer,AccountsAdmin")]
-        [HttpPost("{id}/request-info")]
-        public async Task<IActionResult> RequestInfo(Guid id, [FromBody] RequestReimbursementInfoModel model)
-        {
-            var result = await _reimbursementService.RequestInfoAsync(id, model, CurrentUserId);
-            if (result.Status) return Ok(result);
-            return BadRequest(result);
-        }
-
-        [Authorize(Roles = "AccountsOfficer,AccountsAdmin,Pastor")]
-        [HttpPost("{id}/reject")]
-        public async Task<IActionResult> Reject(Guid id, [FromBody] RejectReimbursementModel model)
-        {
-            var result = await _reimbursementService.RejectAsync(id, model, CurrentUserId);
-            if (result.Status) return Ok(result);
-            return BadRequest(result);
-        }
-
-        [HttpPost("{id}/approve")]
-        public async Task<IActionResult> Approve(Guid id, [FromBody] ReimbursementDecisionModel model)
-        {
-            var roles = CurrentRoles;
-            if (!roles.Contains("AccountsOfficer") && !roles.Contains("AccountsAdmin"))
-            {
-                return Forbid();
-            }
-            var result = await _reimbursementService.ApproveAsync(id, model, CurrentUserId);
-            if (result.Status) return Ok(result);
-            return BadRequest(result);
-        }
-
-        [HttpPost("{id}/payment")]
-        public async Task<IActionResult> RecordPayment(Guid id, [FromBody] RecordReimbursementPaymentModel model)
-        {
-            var roles = CurrentRoles;
-            if (!roles.Contains("AccountsOfficer") && !roles.Contains("AccountsAdmin"))
-            {
-                return Forbid();
-            }
-            var result = await _reimbursementService.RecordPaymentAsync(id, model, CurrentUserId);
-            if (result.Status) return Ok(result);
-            return BadRequest(result);
-        }
-
-        [Authorize(Roles = "ChurchMember,AccountsAdmin")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(Guid id)
         {
             var result = await _reimbursementService.DeleteDraftAsync(id, CurrentUserId);
             if (result.Status) return NoContent();
+            return BadRequest(result);
+        }
+
+        // ---------------- Stage two: Accounts Officer ----------------
+
+        /// <summary>Under Review -> Pending Approval.</summary>
+        [Authorize(Roles = "AccountsOfficer")]
+        [HttpPost("{id}/review")]
+        public async Task<IActionResult> Review(Guid id, [FromBody] ReviewReimbursementModel? model)
+        {
+            var result = await _reimbursementService.ReviewAsync(id, model ?? new ReviewReimbursementModel(), CurrentUserId, CurrentRoles);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        /// <summary>Sends the request back to the member. Officer at Under Review, Admin at Pending Approval.</summary>
+        [Authorize(Roles = "AccountsOfficer,AccountsAdmin")]
+        [HttpPost("{id}/return")]
+        public async Task<IActionResult> Return(Guid id, [FromBody] RequestReimbursementInfoModel model)
+        {
+            var result = await _reimbursementService.ReturnForCorrectionAsync(id, model, CurrentUserId, CurrentRoles);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        /// <summary>Older name for /return, kept so existing clients keep working.</summary>
+        [Authorize(Roles = "AccountsOfficer,AccountsAdmin")]
+        [HttpPost("{id}/request-info")]
+        public Task<IActionResult> RequestInfo(Guid id, [FromBody] RequestReimbursementInfoModel model) => Return(id, model);
+
+        [Authorize(Roles = "AccountsOfficer,AccountsAdmin")]
+        [HttpPost("{id}/reject")]
+        public async Task<IActionResult> Reject(Guid id, [FromBody] RejectReimbursementModel model)
+        {
+            var result = await _reimbursementService.RejectAsync(id, model, CurrentUserId, CurrentRoles);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        // ---------------- Stage three: Accounts Admin ----------------
+
+        /// <summary>Pending Approval -> Approved. Does not mark the request as paid.</summary>
+        [Authorize(Roles = "AccountsAdmin")]
+        [HttpPost("{id}/approve")]
+        public async Task<IActionResult> Approve(Guid id, [FromBody] ReimbursementDecisionModel model)
+        {
+            var result = await _reimbursementService.ApproveAsync(id, model, CurrentUserId, CurrentRoles);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        /// <summary>Approved -> Paid. A separate, explicit confirmation after the money has been paid.</summary>
+        [Authorize(Roles = "AccountsAdmin")]
+        [HttpPost("{id}/payment")]
+        public async Task<IActionResult> RecordPayment(Guid id, [FromBody] RecordReimbursementPaymentModel model)
+        {
+            var result = await _reimbursementService.RecordPaymentAsync(id, model, CurrentUserId, CurrentRoles);
+            if (result.Status) return Ok(result);
             return BadRequest(result);
         }
 

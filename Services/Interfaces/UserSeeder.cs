@@ -14,8 +14,8 @@ public static class UserSeeder
         new("inventory.officer@churchportal.local", "Inventory@123", "InventoryOfficer", "Inventory Officer"),
         new("member@churchportal.local", "Member@123", "ChurchMember", "Church Member"),
         new("accounts.officer@churchportal.local", "Accounts@123", "AccountsOfficer", "Accounts Officer"),
-        new("accounts.admin@churchportal.local", "AccountsAdmin@123", "AccountsAdmin", "Accounts Administrator"),
-        new("pastor@churchportal.local", "Pastor@123", "Pastor", "Pastor")
+        new("accounts.admin@churchportal.local", "AccountsAdmin@123", "AccountsAdmin", "Accounts Administrator")
+        // The Pastor login role is retired; pastors are now name records (see Pastor entity).
     };
 
     public static async Task SeedAsync(ChurchPortalDbContext context)

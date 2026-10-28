@@ -24,10 +24,35 @@ namespace ChurchPortal.Repositories.Implementattions
 
         public Task<User?> GetUserByEmailAsync(string email)
         {
+            // Case-insensitive so "John@x.com" and "john@x.com" sign in to the same account.
+            var normalized = (email ?? string.Empty).Trim().ToLower();
             return _context.Set<User>()
                 .Include(a => a.UserRoles)
                 .ThenInclude(a => a.Role)
-                .FirstOrDefaultAsync(a => a.Email == email && !a.IsDeleted);
+                .FirstOrDefaultAsync(a => a.Email.ToLower() == normalized && !a.IsDeleted);
+        }
+
+        public Task<bool> EmailExistsAsync(string email)
+        {
+            var normalized = (email ?? string.Empty).Trim().ToLower();
+            return _context.Set<User>().AnyAsync(a => a.Email.ToLower() == normalized && !a.IsDeleted);
+        }
+
+        public async Task<Dictionary<Guid, string>> GetDisplayNamesAsync(IEnumerable<Guid> userIds)
+        {
+            var ids = userIds.Where(id => id != Guid.Empty).Distinct().ToList();
+            if (ids.Count == 0)
+            {
+                return new Dictionary<Guid, string>();
+            }
+
+            var rows = await _context.Set<User>()
+                .AsNoTracking()
+                .Where(u => ids.Contains(u.Id))
+                .Select(u => new { u.Id, u.DisplayName, u.Email })
+                .ToListAsync();
+
+            return rows.ToDictionary(u => u.Id, u => string.IsNullOrWhiteSpace(u.DisplayName) ? u.Email : u.DisplayName!);
         }
 
         public Task<User?> GetUserAsync(Expression<Func<User, bool>> predicate)

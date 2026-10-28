@@ -7,6 +7,7 @@ namespace ChurchPortal.Services.Interfaces
     {
         Task<BaseResponse<UserDto>> RegisterAsync(RegisterRequestModel model);
         Task<BaseResponse<UserDto>> LoginAsync(LoginRequestModel model);
+        Task<BaseResponse<UserDto>> SignUpAsync(SignUpRequestModel model);
         Task<bool> DeleteAsync(Guid id);
         Task<BaseResponse<List<UserDto>>> GetAllAsync();
         Task<BaseResponse<UserDto>> GetMeAsync(Guid userId);

@@ -24,6 +24,8 @@ namespace ChurchPortal.DataContext
         public DbSet<ReimbursementReceipt> ReimbursementReceipts { get; set; }
         public DbSet<ReimbursementHistory> ReimbursementHistories { get; set; }
         public DbSet<Notification> Notifications { get; set; }
+        public DbSet<Department> Departments { get; set; }
+        public DbSet<Pastor> Pastors { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -35,6 +37,16 @@ namespace ChurchPortal.DataContext
             {
                 entity.HasIndex(r => r.RequestNumber).IsUnique();
                 entity.HasIndex(r => r.PayeeUserId);
+                entity.HasIndex(r => r.Status);
+                entity.HasIndex(r => r.DepartmentId);
+                entity.HasIndex(r => r.PaymentDate);
+                entity.HasIndex(r => r.SubmittedDate);
+                entity.Property(r => r.ApprovedAmount).HasPrecision(18, 2);
+                entity.Property(r => r.Version).IsRowVersion();
+                entity.HasOne(r => r.DepartmentRecord)
+                    .WithMany(d => d.Reimbursements)
+                    .HasForeignKey(r => r.DepartmentId)
+                    .OnDelete(DeleteBehavior.Restrict);
                 entity.Property(r => r.Subtotal).HasPrecision(18, 2);
                 entity.Property(r => r.Gst).HasPrecision(18, 2);
                 entity.Property(r => r.Pst).HasPrecision(18, 2);
@@ -60,6 +72,46 @@ namespace ChurchPortal.DataContext
                 entity.HasIndex(n => n.UserId);
             });
 
+            modelBuilder.Entity<ReimbursementHistory>(entity =>
+            {
+                entity.HasIndex(h => new { h.ReimbursementRequestId, h.Timestamp });
+            });
+
+            modelBuilder.Entity<Department>(entity =>
+            {
+                entity.Property(d => d.Name).HasMaxLength(120).IsRequired();
+                entity.Property(d => d.NormalizedName).HasMaxLength(120).IsRequired();
+                entity.HasIndex(d => d.NormalizedName).IsUnique();
+                entity.Property(d => d.AnnualBudget).HasPrecision(18, 2);
+                entity.Property(d => d.MonthlyBudget).HasPrecision(18, 2);
+                entity.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_Departments_AnnualBudget_NonNegative", "\"AnnualBudget\" >= 0");
+                    t.HasCheckConstraint("CK_Departments_MonthlyBudget_NonNegative", "\"MonthlyBudget\" IS NULL OR \"MonthlyBudget\" >= 0");
+                });
+            });
+
+            modelBuilder.Entity<Pastor>(entity =>
+            {
+                entity.Property(p => p.Name).HasMaxLength(150).IsRequired();
+                entity.Property(p => p.NormalizedName).HasMaxLength(150).IsRequired();
+                entity.Property(p => p.Email).HasMaxLength(254);
+                entity.Property(p => p.PhoneNumber).HasMaxLength(40);
+                entity.Property(p => p.Description).HasMaxLength(500);
+                // Not unique: two different people can share a name. Duplicates are
+                // caught by a warning the user must confirm.
+                entity.HasIndex(p => p.NormalizedName);
+            });
+
+            modelBuilder.Entity<Service>(entity =>
+            {
+                entity.HasOne(s => s.Pastor)
+                    .WithMany(p => p.Services)
+                    .HasForeignKey(s => s.PastorId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasIndex(s => s.PastorId);
+            });
+
             var adminRoleId = Guid.Parse("11111111-1111-1111-1111-111111111111");
             var attendanceOfficerRoleId = Guid.Parse("22222222-2222-2222-2222-222222222222");
             var fellowshipLeaderRoleId = Guid.Parse("33333333-3333-3333-3333-333333333333");
@@ -77,9 +129,9 @@ namespace ChurchPortal.DataContext
                 new Role { Id = inventoryOfficerRoleId, Name = "InventoryOfficer", Description = "Manages InventoryItem records" },
                 new Role { Id = viewerRoleId, Name = "Viewer", Description = "Read-only access (retired)" },
                 new Role { Id = churchMemberRoleId, Name = "ChurchMember", Description = "Submits and tracks personal reimbursement requests" },
-                new Role { Id = accountsOfficerRoleId, Name = "AccountsOfficer", Description = "Reconciles reimbursement requests and processes payments" },
-                new Role { Id = accountsAdminRoleId, Name = "AccountsAdmin", Description = "Full access to all church records and Accounts Payable, including approvals" },
-                new Role { Id = pastorRoleId, Name = "Pastor", Description = "Approves reimbursements as Minister in charge and oversees all records" }
+                new Role { Id = accountsOfficerRoleId, Name = "AccountsOfficer", Description = "Reviews reimbursement requests and forwards them for final approval" },
+                new Role { Id = accountsAdminRoleId, Name = "AccountsAdmin", Description = "Full access to all church records and Accounts Payable, including final approval and payment confirmation" },
+                new Role { Id = pastorRoleId, Name = "Pastor", Description = "Retired. Pastors are now name records used on services, not a login role." }
             );
 
             var adminUserId = Guid.Parse("99999999-9999-9999-9999-999999999999");

@@ -11,5 +11,11 @@ namespace ChurchPortal.Repositories.Interfaces
         Task<User?> GetByEmailVerificationTokenAsync(string token);
         Task<List<User>> GetAllUsersAsync();
         Task<List<User>> GetUsersByRoleAsync(string roleName);
+
+        /// <summary>DisplayName (or email) for each id, in one query.</summary>
+        Task<Dictionary<Guid, string>> GetDisplayNamesAsync(IEnumerable<Guid> userIds);
+
+        /// <summary>Case-insensitive email existence check (ignores deleted users).</summary>
+        Task<bool> EmailExistsAsync(string email);
     }
 }

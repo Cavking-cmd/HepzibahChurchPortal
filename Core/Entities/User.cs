@@ -9,6 +9,9 @@ namespace ChurchPortal.Core.Entities
         public string? AvatarMimeType { get; set; }
 
         public bool EmailVerified { get; set; }
+
+        /// <summary>True for accounts created through the public sign-up page.</summary>
+        public bool IsSelfRegistered { get; set; }
         public string? EmailVerificationToken { get; set; }
         public DateTime? EmailVerificationTokenExpiry { get; set; }
         public string? PasswordResetToken { get; set; }

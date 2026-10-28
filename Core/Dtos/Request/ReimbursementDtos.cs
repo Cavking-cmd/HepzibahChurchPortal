@@ -23,7 +23,11 @@ namespace ChurchPortal.Core.Dtos.Request
     public class CreateReimbursementRequestModel
     {
         public required string PayeeName { get; set; }
-        public required string Department { get; set; }
+
+        /// <summary>Department or PersonalUse. Department requires DepartmentId.</summary>
+        public ReimbursementClassification Classification { get; set; } = ReimbursementClassification.Department;
+        public Guid? DepartmentId { get; set; }
+
         public required string MinisterInCharge { get; set; }
         public DateTime RequestDate { get; set; }
         public string? Remarks { get; set; }
@@ -36,9 +40,23 @@ namespace ChurchPortal.Core.Dtos.Request
         public required Guid Id { get; set; }
     }
 
+    /// <summary>Accounts Officer forwards a request for final approval.</summary>
+    public class ReviewReimbursementModel
+    {
+        public string? Notes { get; set; }
+    }
+
+    /// <summary>Accounts Admin final approval.</summary>
     public class ReimbursementDecisionModel
     {
         public string? Notes { get; set; }
+
+        /// <summary>Defaults to the requested total. Cannot exceed it.</summary>
+        public decimal? ApprovedAmount { get; set; }
+
+        /// <summary>Required when the server finds the request would exceed a budget.</summary>
+        public string? OverBudgetJustification { get; set; }
+
         public string? PreparedBy { get; set; }
         public string? ChequeNumber { get; set; }
         public string? AuthorizedByName1 { get; set; }
@@ -114,7 +132,15 @@ namespace ChurchPortal.Core.Dtos.Request
         public Guid PayeeUserId { get; set; }
         public string? PayeeEmail { get; set; }
         public required string PayeeName { get; set; }
+
+        /// <summary>Display name: the department record's name, "Personal Use", or the legacy text.</summary>
         public required string Department { get; set; }
+        public ReimbursementClassification Classification { get; set; }
+        public Guid? DepartmentId { get; set; }
+
+        /// <summary>True when an old request still has only free-text department and needs linking.</summary>
+        public bool NeedsDepartmentLink { get; set; }
+
         public required string MinisterInCharge { get; set; }
         public DateTime RequestDate { get; set; }
         public string? Remarks { get; set; }
@@ -128,9 +154,21 @@ namespace ChurchPortal.Core.Dtos.Request
         public int ReceiptCount { get; set; }
         public DateTime? SubmittedDate { get; set; }
         public DateTime? MinisterApprovedDate { get; set; }
+
         public DateTime? ReviewedDate { get; set; }
+        public string? ReviewedByName { get; set; }
+        public string? ReviewNotes { get; set; }
+
         public DateTime? ApprovedDate { get; set; }
+        public string? ApprovedByName { get; set; }
+        public decimal? ApprovedAmount { get; set; }
+        public string? ApprovalNotes { get; set; }
+        public bool OverBudgetAtApproval { get; set; }
+        public string? OverBudgetJustification { get; set; }
+
         public DateTime? PaymentDate { get; set; }
+        public DateTime? PaymentConfirmedAt { get; set; }
+        public string? PaidByName { get; set; }
         public decimal? AmountPaid { get; set; }
         public string? PaymentMethod { get; set; }
         public string? PaymentReference { get; set; }
@@ -140,6 +178,9 @@ namespace ChurchPortal.Core.Dtos.Request
         public string? AuthorizedByName2 { get; set; }
         public DateTime? AuthorizationDate { get; set; }
         public string? FinanceNotes { get; set; }
+
+        public DateTime? RejectedDate { get; set; }
+        public string? RejectedByName { get; set; }
         public string? RejectionReason { get; set; }
         public string? InfoRequestNotes { get; set; }
         public DateTime CreatedDate { get; set; }

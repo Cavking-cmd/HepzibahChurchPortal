@@ -27,6 +27,10 @@ namespace ChurchPortal.Services.Implementations
         private readonly IMemoryCache _cache;
 
         private const int MaxAvatarBytes = 2 * 1024 * 1024;
+        private const string ChurchMemberRole = "ChurchMember";
+
+        /// <summary>Roles that still exist in the database for history but can no longer be used.</summary>
+        private static readonly HashSet<string> RetiredRoles = new(StringComparer.OrdinalIgnoreCase) { "Pastor", "Viewer" };
 
         public UserService(
             IUserRepository userRepository,
@@ -99,6 +103,21 @@ namespace ChurchPortal.Services.Implementations
                     return new BaseResponse<UserDto> { Message = "Invalid email or password.", Status = false, Data = null };
                 }
 
+                var activeRoles = user.UserRoles
+                    .Where(ur => !ur.IsDeleted && ur.Role != null && !ur.Role.IsDeleted && !RetiredRoles.Contains(ur.Role.Name))
+                    .Select(ur => ur.Role!.Name)
+                    .ToList();
+
+                if (activeRoles.Count == 0)
+                {
+                    return new BaseResponse<UserDto>
+                    {
+                        Message = "Your account does not have an active role. Ask an administrator to assign one.",
+                        Status = false,
+                        Data = null
+                    };
+                }
+
                 return new BaseResponse<UserDto>
                 {
                     Message = "Login successful.",
@@ -107,7 +126,9 @@ namespace ChurchPortal.Services.Implementations
                     {
                         Id = user.Id,
                         Email = user.Email,
-                        UserRoles = user.UserRoles.Where(ur => !ur.IsDeleted && ur.Role != null && !ur.Role.IsDeleted).Select(ur => ur.Role!.Name).ToList()
+                        DisplayName = user.DisplayName,
+                        EmailVerified = user.EmailVerified,
+                        UserRoles = activeRoles
                     }
                 };
             }
@@ -135,6 +156,12 @@ namespace ChurchPortal.Services.Implementations
                 if (Validator.CheckDuplicate(exists))
                 {
                     return new BaseResponse<UserDto> { Message = "A user with this email already exists.", Status = false, Data = null };
+                }
+
+                var retired = registerRequest.Roles.FirstOrDefault(r => RetiredRoles.Contains(r));
+                if (retired != null)
+                {
+                    return new BaseResponse<UserDto> { Message = $"The {retired} role has been retired and cannot be assigned.", Status = false, Data = null };
                 }
 
                 var roles = new List<Role>();
@@ -187,6 +214,110 @@ namespace ChurchPortal.Services.Implementations
             catch (Exception ex)
             {
                 return new BaseResponse<UserDto> { Message = ex.Message, Status = false, Data = null };
+            }
+        }
+
+        /// <summary>
+        /// Public self-registration. The role is fixed to ChurchMember on the server; the request
+        /// has no way to ask for anything else. The account can sign in straight away but cannot
+        /// submit reimbursements until the email address is verified.
+        /// </summary>
+        public async Task<BaseResponse<UserDto>> SignUpAsync(SignUpRequestModel model)
+        {
+            try
+            {
+                var fullName = NameNormalizer.Clean(model?.FullName);
+                var email = (model?.Email ?? string.Empty).Trim().ToLowerInvariant();
+                var password = model?.Password ?? string.Empty;
+
+                if (fullName.Length == 0)
+                {
+                    return new BaseResponse<UserDto> { Message = "Full name is required.", Status = false };
+                }
+
+                if (fullName.Length > 100)
+                {
+                    return new BaseResponse<UserDto> { Message = "Full name must be 100 characters or fewer.", Status = false };
+                }
+
+                if (email.Length == 0 || email.Length > 254 || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(email) || !email.Contains('.'))
+                {
+                    return new BaseResponse<UserDto> { Message = "Enter a valid email address.", Status = false };
+                }
+
+                if (password.Length < 8 || !password.Any(char.IsLetter) || !password.Any(char.IsDigit))
+                {
+                    return new BaseResponse<UserDto> { Message = "Password must be at least 8 characters and include a letter and a number.", Status = false };
+                }
+
+                if (password != model?.ConfirmPassword)
+                {
+                    return new BaseResponse<UserDto> { Message = "Passwords do not match.", Status = false };
+                }
+
+                if (await _userRepository.EmailExistsAsync(email))
+                {
+                    return new BaseResponse<UserDto>
+                    {
+                        Message = "An account with this email already exists. Sign in, or use \"Forgot password?\" to reset it.",
+                        Status = false
+                    };
+                }
+
+                var memberRole = await _roleRepository.GetRoleByNameAsync(ChurchMemberRole);
+                if (memberRole == null)
+                {
+                    _logger.LogError("Sign-up failed: the {Role} role is missing.", ChurchMemberRole);
+                    return new BaseResponse<UserDto> { Message = "Sign-up is not available right now. Please try again later.", Status = false };
+                }
+
+                var user = new User
+                {
+                    Email = email,
+                    Password = BCrypt.Net.BCrypt.HashPassword(password),
+                    DisplayName = fullName,
+                    IsSelfRegistered = true,
+                    EmailVerified = false,
+                    EmailVerificationToken = GenerateToken(),
+                    EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(VerificationTokenHours)
+                };
+
+                await _userRepository.CreateAsync(user);
+                await _userRoleRepository.CreateAsync(new UserRole { UserId = user.Id, RoleId = memberRole.Id });
+                await _auditLogRepository.CreateAsync(new AuditLog
+                {
+                    EntityName = nameof(User),
+                    EntityId = user.Id,
+                    Action = "SelfRegistered",
+                    UserId = user.Id,
+                    Details = "Public sign-up as ChurchMember"
+                });
+                await _unitOfWork.SaveChangesAsync();
+
+                var emailError = _emailSender.IsConfigured
+                    ? await SendVerificationEmailAsync(user)
+                    : "Email delivery is not configured on the server.";
+
+                return new BaseResponse<UserDto>
+                {
+                    Message = emailError == null
+                        ? $"Account created. We sent a verification link to {user.Email}."
+                        : $"Account created, but the verification email could not be sent ({emailError}). You can resend it after signing in.",
+                    Status = true,
+                    Data = new UserDto
+                    {
+                        Id = user.Id,
+                        Email = user.Email,
+                        DisplayName = user.DisplayName,
+                        EmailVerified = false,
+                        UserRoles = [ChurchMemberRole]
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Sign-up failed.");
+                return new BaseResponse<UserDto> { Message = "An error occurred while creating your account.", Status = false };
             }
         }
 

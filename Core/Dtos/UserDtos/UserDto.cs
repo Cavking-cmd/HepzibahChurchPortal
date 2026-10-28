@@ -29,6 +29,15 @@ namespace ChurchPortal.Core.Dtos.UserDtos
         public required List<string> Roles { get; set; }
     }
 
+    /// <summary>Public sign-up. There is deliberately no role field: new accounts are always ChurchMember.</summary>
+    public class SignUpRequestModel
+    {
+        public string? FullName { get; set; }
+        public string? Email { get; set; }
+        public string? Password { get; set; }
+        public string? ConfirmPassword { get; set; }
+    }
+
     public class UpdateProfileRequest
     {
         public string? DisplayName { get; set; }

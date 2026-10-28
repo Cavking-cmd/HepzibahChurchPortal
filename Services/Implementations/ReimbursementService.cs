@@ -1,19 +1,42 @@
-using System.Net;
 using ChurchPortal.Core.Dtos;
 using ChurchPortal.Core.Dtos.Request;
 using ChurchPortal.Core.Entities;
 using ChurchPortal.Repositories.Interfaces;
 using ChurchPortal.Services.Interfaces;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ChurchPortal.Services.Implementations
 {
+    /// <summary>
+    /// Reimbursement workflow. Every rule is enforced here, on the server, using the
+    /// signed-in user's id and roles from the JWT. Nothing about status, role or
+    /// payment sent by the browser is trusted.
+    ///
+    ///   Draft / Returned for correction --member submits--> Under Review
+    ///   Under Review     --Accounts Officer forwards--> Pending Approval
+    ///   Under Review     --Accounts Officer returns---> Returned for correction
+    ///   Under Review     --Accounts Officer rejects---> Rejected
+    ///   Pending Approval --Accounts Admin approves----> Approved   (not paid)
+    ///   Pending Approval --Accounts Admin returns-----> Returned for correction
+    ///   Pending Approval --Accounts Admin rejects-----> Rejected
+    ///   Approved         --Accounts Admin confirms payment--> Paid
+    ///   Rejected and Paid are final.
+    ///
+    /// Nobody can act on their own request, and the person who reviewed a request
+    /// cannot also give its final approval.
+    /// </summary>
     public class ReimbursementService : IReimbursementService
     {
-        private const string AccountsOfficerRole = "AccountsOfficer";
-        private const string AccountsAdminRole = "AccountsAdmin";
-        private const string PastorRole = "Pastor";
+        public const string ChurchMemberRole = "ChurchMember";
+        public const string AccountsOfficerRole = "AccountsOfficer";
+        public const string AccountsAdminRole = "AccountsAdmin";
+        public const string PersonalUseLabel = "Personal Use";
+
         private const int MaxItems = 10;
         private const long MaxReceiptBytes = 5 * 1024 * 1024;
+        private const string ConcurrencyMessage =
+            "This request was changed by someone else at the same moment. Refresh it and try again.";
 
         private static readonly HashSet<string> AllowedReceiptTypes = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -25,35 +48,57 @@ namespace ChurchPortal.Services.Implementations
 
         private readonly IReimbursementRepository _reimbursementRepository;
         private readonly IUserRepository _userRepository;
+        private readonly IDepartmentRepository _departmentRepository;
         private readonly INotificationRepository _notificationRepository;
         private readonly IAuditLogRepository _auditLogRepository;
+        private readonly IBudgetService _budgetService;
         private readonly IEmailSender _emailSender;
         private readonly IUnitOfWork _unitOfWork;
+        private readonly ILogger<ReimbursementService> _logger;
+
+        // Emails are only sent after the database change has been saved.
+        private readonly List<(string To, string Title, string Message)> _pendingEmails = [];
 
         public ReimbursementService(
             IReimbursementRepository reimbursementRepository,
             IUserRepository userRepository,
+            IDepartmentRepository departmentRepository,
             INotificationRepository notificationRepository,
             IAuditLogRepository auditLogRepository,
+            IBudgetService budgetService,
             IEmailSender emailSender,
-            IUnitOfWork unitOfWork)
+            IUnitOfWork unitOfWork,
+            ILogger<ReimbursementService> logger)
         {
             _reimbursementRepository = reimbursementRepository;
             _userRepository = userRepository;
+            _departmentRepository = departmentRepository;
             _notificationRepository = notificationRepository;
             _auditLogRepository = auditLogRepository;
+            _budgetService = budgetService;
             _emailSender = emailSender;
             _unitOfWork = unitOfWork;
+            _logger = logger;
         }
+
+        // =====================================================================
+        // Member: create, edit, submit, delete
+        // =====================================================================
 
         public async Task<BaseResponse<ReimbursementRequestDto>> CreateAsync(CreateReimbursementRequestModel model, Guid userId)
         {
             try
             {
-                var error = ValidateFields(model.PayeeName, model.Department, model.MinisterInCharge, model.Items, out var items);
+                var error = ValidateFields(model.PayeeName, model.MinisterInCharge, model.Items, out var items);
                 if (error != null)
                 {
                     return Fail<ReimbursementRequestDto>(error);
+                }
+
+                var classification = await ResolveClassificationAsync(model.Classification, model.DepartmentId, null);
+                if (classification.Error != null)
+                {
+                    return Fail<ReimbursementRequestDto>(classification.Error);
                 }
 
                 if (!TryBuildReceipts(model.Receipts, userId, out var receipts, out var receiptError))
@@ -65,9 +110,11 @@ namespace ChurchPortal.Services.Implementations
                 {
                     RequestNumber = await GenerateRequestNumberAsync(),
                     PayeeUserId = userId,
-                    PayeeName = model.PayeeName.Trim(),
-                    Department = model.Department.Trim(),
-                    MinisterInCharge = model.MinisterInCharge.Trim(),
+                    PayeeName = NameNormalizer.Clean(model.PayeeName),
+                    Classification = classification.Classification,
+                    DepartmentId = classification.DepartmentId,
+                    Department = classification.DisplayName,
+                    MinisterInCharge = NameNormalizer.Clean(model.MinisterInCharge),
                     RequestDate = Validator.AsUtc(model.RequestDate),
                     Remarks = model.Remarks?.Trim(),
                     Status = ReimbursementStatus.Draft,
@@ -92,11 +139,11 @@ namespace ChurchPortal.Services.Implementations
                 await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Create", userId));
                 await _unitOfWork.SaveChangesAsync();
 
-                return await BuildResponseAsync(request, "Reimbursement draft created successfully.");
+                return await BuildResponseAsync(request, "Reimbursement draft saved.");
             }
             catch (Exception ex)
             {
-                return Fail<ReimbursementRequestDto>(ex.Message);
+                return Unexpected<ReimbursementRequestDto>(ex, "create the reimbursement");
             }
         }
 
@@ -110,20 +157,26 @@ namespace ChurchPortal.Services.Implementations
                     return Fail<ReimbursementRequestDto>("Reimbursement not found.");
                 }
 
-                if (request.PayeeUserId != userId && !await IsAccountsAdminAsync(userId))
+                if (request.PayeeUserId != userId)
                 {
                     return Fail<ReimbursementRequestDto>("You can only edit your own reimbursement.");
                 }
 
-                if (request.Status is not (ReimbursementStatus.Draft or ReimbursementStatus.InfoRequested))
+                if (request.Status is not (ReimbursementStatus.Draft or ReimbursementStatus.ReturnedForCorrection))
                 {
-                    return Fail<ReimbursementRequestDto>("Only draft or information-requested reimbursements can be edited.");
+                    return Fail<ReimbursementRequestDto>("Only drafts and requests returned for correction can be edited.");
                 }
 
-                var error = ValidateFields(model.PayeeName, model.Department, model.MinisterInCharge, model.Items, out var items);
+                var error = ValidateFields(model.PayeeName, model.MinisterInCharge, model.Items, out var items);
                 if (error != null)
                 {
                     return Fail<ReimbursementRequestDto>(error);
+                }
+
+                var classification = await ResolveClassificationAsync(model.Classification, model.DepartmentId, request.DepartmentId);
+                if (classification.Error != null)
+                {
+                    return Fail<ReimbursementRequestDto>(classification.Error);
                 }
 
                 if (!TryBuildReceipts(model.Receipts, userId, out var receipts, out var receiptError))
@@ -131,9 +184,11 @@ namespace ChurchPortal.Services.Implementations
                     return Fail<ReimbursementRequestDto>(receiptError!);
                 }
 
-                request.PayeeName = model.PayeeName.Trim();
-                request.Department = model.Department.Trim();
-                request.MinisterInCharge = model.MinisterInCharge.Trim();
+                request.PayeeName = NameNormalizer.Clean(model.PayeeName);
+                request.Classification = classification.Classification;
+                request.DepartmentId = classification.DepartmentId;
+                request.Department = classification.DisplayName;
+                request.MinisterInCharge = NameNormalizer.Clean(model.MinisterInCharge);
                 request.RequestDate = Validator.AsUtc(model.RequestDate);
                 request.Remarks = model.Remarks?.Trim();
 
@@ -155,16 +210,20 @@ namespace ChurchPortal.Services.Implementations
                 _reimbursementRepository.TrackRangeAsAdded(receipts);
 
                 ApplyTotals(request);
-                await AddHistoryAsync(request, userId, "Updated", request.Status, request.Status, "Draft updated.");
-
+                await AddHistoryAsync(request, userId, "Updated", null, null, "Request updated by the member.");
                 await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Update", userId));
-                await _unitOfWork.SaveChangesAsync();
 
-                return await BuildResponseAsync(request, "Reimbursement draft updated successfully.");
+                var saveError = await TrySaveAsync();
+                if (saveError != null)
+                {
+                    return Fail<ReimbursementRequestDto>(saveError);
+                }
+
+                return await BuildResponseAsync(request, "Reimbursement updated.");
             }
             catch (Exception ex)
             {
-                return Fail<ReimbursementRequestDto>(ex.Message);
+                return Unexpected<ReimbursementRequestDto>(ex, "update the reimbursement");
             }
         }
 
@@ -178,14 +237,43 @@ namespace ChurchPortal.Services.Implementations
                     return Fail<ReimbursementRequestDto>("Reimbursement not found.");
                 }
 
-                if (request.PayeeUserId != userId && !await IsAccountsAdminAsync(userId))
+                if (request.PayeeUserId != userId)
                 {
                     return Fail<ReimbursementRequestDto>("You can only submit your own reimbursement.");
                 }
 
-                if (request.Status is not (ReimbursementStatus.Draft or ReimbursementStatus.InfoRequested))
+                if (request.Status is not (ReimbursementStatus.Draft or ReimbursementStatus.ReturnedForCorrection))
                 {
-                    return Fail<ReimbursementRequestDto>("Only draft or information-requested reimbursements can be submitted.");
+                    return Fail<ReimbursementRequestDto>("Only drafts and requests returned for correction can be submitted.");
+                }
+
+                var member = await _userRepository.GetByIdAsync(userId);
+                if (member == null)
+                {
+                    return Fail<ReimbursementRequestDto>("We could not find your account.");
+                }
+
+                if (member.IsSelfRegistered && !member.EmailVerified)
+                {
+                    return Fail<ReimbursementRequestDto>(
+                        "Please verify your email address before submitting. Use the link in your welcome email, or resend it from the banner at the top of the page.");
+                }
+
+                if (request.Classification == ReimbursementClassification.Department)
+                {
+                    if (request.DepartmentId == null)
+                    {
+                        return Fail<ReimbursementRequestDto>("Choose a department (or Personal Use) before submitting.");
+                    }
+
+                    var department = await _departmentRepository.GetByIdAsync(request.DepartmentId.Value);
+                    if (department == null || !department.IsActive)
+                    {
+                        return Fail<ReimbursementRequestDto>(
+                            "The department on this request is no longer accepting new requests. Edit it and choose another department.");
+                    }
+
+                    request.Department = department.Name;
                 }
 
                 if (request.Items.Count == 0)
@@ -205,258 +293,41 @@ namespace ChurchPortal.Services.Implementations
                 }
 
                 var fromStatus = request.Status;
-                request.Status = ReimbursementStatus.Pending;
-                request.SubmittedDate = DateTime.UtcNow;
+                var resubmission = fromStatus == ReimbursementStatus.ReturnedForCorrection;
+                request.Status = ReimbursementStatus.UnderReview;
+                request.SubmittedDate ??= DateTime.UtcNow;
                 request.InfoRequestNotes = null;
-                request.RejectionReason = null;
-                await AddHistoryAsync(request, userId, "Submitted", fromStatus, ReimbursementStatus.Pending, "Submitted for minister approval.");
 
-                var approvers = await GetUsersByRolesAsync(PastorRole, AccountsAdminRole);
-                await NotifyAsync(approvers, userId, $"Reimbursement {request.RequestNumber} awaiting approval", $"{request.PayeeName} submitted a reimbursement of {FormatMoney(request.TotalAmount)} for approval.", request.Id);
+                await AddHistoryAsync(
+                    request,
+                    userId,
+                    resubmission ? "Resubmitted" : "Submitted",
+                    fromStatus,
+                    ReimbursementStatus.UnderReview,
+                    resubmission ? "Corrected and resubmitted for review." : "Submitted for review.");
 
-                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Submit", userId));
-                await _unitOfWork.SaveChangesAsync();
+                var officers = await _userRepository.GetUsersByRoleAsync(AccountsOfficerRole);
+                await QueueNotifyAsync(
+                    officers,
+                    userId,
+                    $"Reimbursement {request.RequestNumber} ready for review",
+                    $"{request.PayeeName} {(resubmission ? "resubmitted" : "submitted")} {FormatMoney(request.TotalAmount)} ({request.Department}).",
+                    request.Id);
 
-                return await BuildResponseAsync(request, "Reimbursement submitted for minister approval.");
+                await _auditLogRepository.CreateAsync(NewAudit(request.Id, resubmission ? "Resubmit" : "Submit", userId));
+
+                var saveError = await TrySaveAsync();
+                if (saveError != null)
+                {
+                    return Fail<ReimbursementRequestDto>(saveError);
+                }
+
+                await FlushEmailsAsync();
+                return await BuildResponseAsync(request, "Submitted. Your request is now under review by an Accounts Officer.");
             }
             catch (Exception ex)
             {
-                return Fail<ReimbursementRequestDto>(ex.Message);
-            }
-        }
-
-        public async Task<BaseResponse<ReimbursementRequestDto>> MinisterApproveAsync(Guid id, ReimbursementDecisionModel model, Guid userId)
-        {
-            try
-            {
-                var request = await _reimbursementRepository.GetWithDetailsAsync(id);
-                if (request == null)
-                {
-                    return Fail<ReimbursementRequestDto>("Reimbursement not found.");
-                }
-
-                if (request.Status != ReimbursementStatus.Pending)
-                {
-                    return Fail<ReimbursementRequestDto>("Only pending reimbursements can be approved by the minister.");
-                }
-
-                request.Status = ReimbursementStatus.AccountsReview;
-                request.MinisterApprovedBy = userId;
-                request.MinisterApprovedDate = DateTime.UtcNow;
-                await AddHistoryAsync(request, userId, "MinisterApproved", ReimbursementStatus.Pending, ReimbursementStatus.AccountsReview, model.Notes ?? "Approved by minister in charge.");
-
-                var recipients = await GetUsersByRolesAsync(AccountsOfficerRole, AccountsAdminRole);
-                var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
-                if (payee != null)
-                {
-                    recipients.Add(payee);
-                }
-
-                await NotifyAsync(recipients, userId, $"Reimbursement {request.RequestNumber} ready for accounts review", $"{request.PayeeName}'s reimbursement of {FormatMoney(request.TotalAmount)} was approved by the minister and is ready for reconciliation.", request.Id);
-
-                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "MinisterApprove", userId));
-                await _unitOfWork.SaveChangesAsync();
-
-                return await BuildResponseAsync(request, "Reimbursement approved by minister and sent to accounts.");
-            }
-            catch (Exception ex)
-            {
-                return Fail<ReimbursementRequestDto>(ex.Message);
-            }
-        }
-
-        public async Task<BaseResponse<ReimbursementRequestDto>> RequestInfoAsync(Guid id, RequestReimbursementInfoModel model, Guid userId)
-        {
-            try
-            {
-                var request = await _reimbursementRepository.GetWithDetailsAsync(id);
-                if (request == null)
-                {
-                    return Fail<ReimbursementRequestDto>("Reimbursement not found.");
-                }
-
-                if (Validator.CheckString(model.Notes))
-                {
-                    return Fail<ReimbursementRequestDto>("Describe the information that is required.");
-                }
-
-                if (request.Status is not (ReimbursementStatus.Pending or ReimbursementStatus.AccountsReview or ReimbursementStatus.Approved))
-                {
-                    return Fail<ReimbursementRequestDto>("Information can only be requested for pending, in-review or approved reimbursements.");
-                }
-
-                var fromStatus = request.Status;
-                request.Status = ReimbursementStatus.InfoRequested;
-                request.InfoRequestNotes = model.Notes.Trim();
-                await AddHistoryAsync(request, userId, "InfoRequested", fromStatus, ReimbursementStatus.InfoRequested, model.Notes.Trim());
-
-                var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
-                if (payee != null)
-                {
-                    await NotifyAsync([payee], userId, $"More information needed for {request.RequestNumber}", model.Notes.Trim(), request.Id);
-                }
-
-                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "RequestInfo", userId));
-                await _unitOfWork.SaveChangesAsync();
-
-                return await BuildResponseAsync(request, "Information requested from the requester.");
-            }
-            catch (Exception ex)
-            {
-                return Fail<ReimbursementRequestDto>(ex.Message);
-            }
-        }
-
-        public async Task<BaseResponse<ReimbursementRequestDto>> RejectAsync(Guid id, RejectReimbursementModel model, Guid userId)
-        {
-            try
-            {
-                var request = await _reimbursementRepository.GetWithDetailsAsync(id);
-                if (request == null)
-                {
-                    return Fail<ReimbursementRequestDto>("Reimbursement not found.");
-                }
-
-                if (Validator.CheckString(model.Reason))
-                {
-                    return Fail<ReimbursementRequestDto>("A rejection reason is required.");
-                }
-
-                if (request.Status is ReimbursementStatus.Paid or ReimbursementStatus.Rejected or ReimbursementStatus.Draft)
-                {
-                    return Fail<ReimbursementRequestDto>("This reimbursement cannot be rejected in its current state.");
-                }
-
-                var fromStatus = request.Status;
-                request.Status = ReimbursementStatus.Rejected;
-                request.RejectionReason = model.Reason.Trim();
-                await AddHistoryAsync(request, userId, "Rejected", fromStatus, ReimbursementStatus.Rejected, model.Reason.Trim());
-
-                var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
-                if (payee != null)
-                {
-                    await NotifyAsync([payee], userId, $"Reimbursement {request.RequestNumber} rejected", model.Reason.Trim(), request.Id);
-                }
-
-                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Reject", userId));
-                await _unitOfWork.SaveChangesAsync();
-
-                return await BuildResponseAsync(request, "Reimbursement rejected.");
-            }
-            catch (Exception ex)
-            {
-                return Fail<ReimbursementRequestDto>(ex.Message);
-            }
-        }
-
-        public async Task<BaseResponse<ReimbursementRequestDto>> ApproveAsync(Guid id, ReimbursementDecisionModel model, Guid userId)
-        {
-            try
-            {
-                var request = await _reimbursementRepository.GetWithDetailsAsync(id);
-                if (request == null)
-                {
-                    return Fail<ReimbursementRequestDto>("Reimbursement not found.");
-                }
-
-                if (request.Status != ReimbursementStatus.AccountsReview)
-                {
-                    return Fail<ReimbursementRequestDto>("Only reimbursements in accounts review can be approved.");
-                }
-
-                request.Status = ReimbursementStatus.Approved;
-                request.ApprovedBy = userId;
-                request.ReviewedBy = request.ReviewedBy ?? userId;
-                request.ReviewedDate = request.ReviewedDate ?? DateTime.UtcNow;
-                request.ApprovedDate = DateTime.UtcNow;
-                request.PreparedBy = model.PreparedBy?.Trim();
-                request.ChequeNumber = model.ChequeNumber?.Trim();
-                request.AuthorizedByName1 = model.AuthorizedByName1?.Trim();
-                request.AuthorizedByName2 = model.AuthorizedByName2?.Trim();
-                request.AuthorizationDate = Validator.AsUtc(model.AuthorizationDate);
-                await AddHistoryAsync(request, userId, "Approved", ReimbursementStatus.AccountsReview, ReimbursementStatus.Approved, model.Notes ?? "Approved for payment.");
-
-                var recipients = await GetUsersByRolesAsync(AccountsOfficerRole);
-                var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
-                if (payee != null)
-                {
-                    recipients.Add(payee);
-                }
-
-                await NotifyAsync(recipients, userId, $"Reimbursement {request.RequestNumber} approved for payment", $"{request.PayeeName}'s reimbursement of {FormatMoney(request.TotalAmount)} was approved and is ready for payment.", request.Id);
-
-                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Approve", userId));
-                await _unitOfWork.SaveChangesAsync();
-
-                return await BuildResponseAsync(request, "Reimbursement approved for payment.");
-            }
-            catch (Exception ex)
-            {
-                return Fail<ReimbursementRequestDto>(ex.Message);
-            }
-        }
-
-        public async Task<BaseResponse<ReimbursementRequestDto>> RecordPaymentAsync(Guid id, RecordReimbursementPaymentModel model, Guid userId)
-        {
-            try
-            {
-                var request = await _reimbursementRepository.GetWithDetailsAsync(id);
-                if (request == null)
-                {
-                    return Fail<ReimbursementRequestDto>("Reimbursement not found.");
-                }
-
-                if (request.Status != ReimbursementStatus.Approved)
-                {
-                    return Fail<ReimbursementRequestDto>("Only approved reimbursements can be paid.");
-                }
-
-                if (model.AmountPaid <= 0)
-                {
-                    return Fail<ReimbursementRequestDto>("The paid amount must be greater than zero.");
-                }
-
-                if (Validator.CheckString(model.PaymentMethod))
-                {
-                    return Fail<ReimbursementRequestDto>("Payment method is required.");
-                }
-
-                if (model.AmountPaid != request.TotalAmount && string.IsNullOrWhiteSpace(model.FinanceNotes))
-                {
-                    return Fail<ReimbursementRequestDto>("Add a finance note explaining the difference between the approved total and the amount paid.");
-                }
-
-                request.Status = ReimbursementStatus.Paid;
-                request.PaidBy = userId;
-                request.PaymentDate = Validator.AsUtc(model.PaymentDate);
-                request.AmountPaid = model.AmountPaid;
-                request.PaymentMethod = model.PaymentMethod.Trim();
-                request.PaymentReference = model.PaymentReference?.Trim();
-                request.PreparedBy = model.PreparedBy?.Trim();
-                request.ChequeNumber = model.ChequeNumber?.Trim();
-                request.AuthorizedByName1 = model.AuthorizedByName1?.Trim();
-                request.AuthorizedByName2 = model.AuthorizedByName2?.Trim();
-                request.AuthorizationDate = Validator.AsUtc(model.AuthorizationDate);
-                request.FinanceNotes = model.FinanceNotes?.Trim();
-                await AddHistoryAsync(request, userId, "Paid", ReimbursementStatus.Approved, ReimbursementStatus.Paid, $"Paid {FormatMoney(model.AmountPaid)} via {request.PaymentMethod}.");
-
-                var recipients = await GetUsersByRolesAsync(AccountsAdminRole);
-                var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
-                if (payee != null)
-                {
-                    recipients.Add(payee);
-                }
-
-                await NotifyAsync(recipients, userId, $"Reimbursement {request.RequestNumber} paid", $"{request.PayeeName}'s reimbursement of {FormatMoney(model.AmountPaid)} was paid via {request.PaymentMethod}.", request.Id);
-
-                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Pay", userId));
-                await _unitOfWork.SaveChangesAsync();
-
-                return await BuildResponseAsync(request, "Payment recorded successfully.");
-            }
-            catch (Exception ex)
-            {
-                return Fail<ReimbursementRequestDto>(ex.Message);
+                return Unexpected<ReimbursementRequestDto>(ex, "submit the reimbursement");
             }
         }
 
@@ -470,7 +341,7 @@ namespace ChurchPortal.Services.Implementations
                     return Fail<bool>("Reimbursement not found.");
                 }
 
-                if (request.PayeeUserId != userId && !await IsAccountsAdminAsync(userId))
+                if (request.PayeeUserId != userId)
                 {
                     return Fail<bool>("You can only delete your own draft.");
                 }
@@ -480,16 +351,430 @@ namespace ChurchPortal.Services.Implementations
                     return Fail<bool>("Only drafts can be deleted.");
                 }
 
+                request.IsDeleted = true;
                 await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Delete", userId));
-                await _reimbursementRepository.SoftDeleteAsync(request);
+
+                var saveError = await TrySaveAsync();
+                if (saveError != null)
+                {
+                    return Fail<bool>(saveError);
+                }
 
                 return new BaseResponse<bool> { Message = "Draft deleted.", Status = true, Data = true };
             }
             catch (Exception ex)
             {
-                return Fail<bool>(ex.Message);
+                return Unexpected<bool>(ex, "delete the draft");
             }
         }
+
+        // =====================================================================
+        // Stage two: Accounts Officer review
+        // =====================================================================
+
+        public async Task<BaseResponse<ReimbursementRequestDto>> ReviewAsync(
+            Guid id, ReviewReimbursementModel model, Guid userId, IReadOnlyCollection<string> roles)
+        {
+            try
+            {
+                if (!roles.Contains(AccountsOfficerRole))
+                {
+                    return Fail<ReimbursementRequestDto>("Only an Accounts Officer can review a request.");
+                }
+
+                var request = await _reimbursementRepository.GetWithDetailsAsync(id);
+                if (request == null)
+                {
+                    return Fail<ReimbursementRequestDto>("Reimbursement not found.");
+                }
+
+                if (request.PayeeUserId == userId)
+                {
+                    return Fail<ReimbursementRequestDto>("You cannot review your own reimbursement.");
+                }
+
+                if (!IsAwaitingReview(request.Status))
+                {
+                    return Fail<ReimbursementRequestDto>($"Only requests under review can be forwarded. This one is {Describe(request.Status)}.");
+                }
+
+                if (request.Classification == ReimbursementClassification.Department && request.DepartmentId == null)
+                {
+                    return Fail<ReimbursementRequestDto>(
+                        $"This older request still has the typed department \"{request.Department}\". " +
+                        "Ask an Accounts Admin to link it to a department, or return it to the member.");
+                }
+
+                var budget = await _budgetService.GetRequestBudgetAsync(request);
+                var notes = model.Notes?.Trim();
+                var historyNote = string.IsNullOrWhiteSpace(notes) ? "Reviewed and forwarded for final approval." : notes;
+                if (budget.RequiresOverBudgetJustification)
+                {
+                    historyNote += " [Budget warning at review: " + string.Join(" ", budget.Alerts.Where(a => a.Severity != "info").Select(a => a.Message)) + "]";
+                }
+
+                var fromStatus = request.Status;
+                request.Status = ReimbursementStatus.PendingApproval;
+                request.ReviewedBy = userId;
+                request.ReviewedDate = DateTime.UtcNow;
+                request.ReviewNotes = notes;
+
+                await AddHistoryAsync(request, userId, "Reviewed", fromStatus, ReimbursementStatus.PendingApproval, historyNote);
+
+                var admins = await _userRepository.GetUsersByRoleAsync(AccountsAdminRole);
+                await QueueNotifyAsync(
+                    admins,
+                    userId,
+                    $"Reimbursement {request.RequestNumber} awaiting final approval",
+                    $"{request.PayeeName}'s request for {FormatMoney(request.TotalAmount)} ({request.Department}) passed accounts review." +
+                    (budget.RequiresOverBudgetJustification ? " It is over budget." : string.Empty),
+                    request.Id);
+                await QueueNotifyPayeeAsync(
+                    request,
+                    userId,
+                    $"Reimbursement {request.RequestNumber} passed review",
+                    "Your request passed accounts review and is waiting for final approval. It has not been approved or paid yet.");
+
+                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Review", userId));
+
+                var saveError = await TrySaveAsync();
+                if (saveError != null)
+                {
+                    return Fail<ReimbursementRequestDto>(saveError);
+                }
+
+                await FlushEmailsAsync();
+                return await BuildResponseAsync(request, "Forwarded for final approval.");
+            }
+            catch (Exception ex)
+            {
+                return Unexpected<ReimbursementRequestDto>(ex, "review the reimbursement");
+            }
+        }
+
+        public async Task<BaseResponse<ReimbursementRequestDto>> ReturnForCorrectionAsync(
+            Guid id, RequestReimbursementInfoModel model, Guid userId, IReadOnlyCollection<string> roles)
+        {
+            try
+            {
+                if (Validator.CheckString(model.Notes))
+                {
+                    return Fail<ReimbursementRequestDto>("Explain what the member needs to correct or add.");
+                }
+
+                var request = await _reimbursementRepository.GetWithDetailsAsync(id);
+                if (request == null)
+                {
+                    return Fail<ReimbursementRequestDto>("Reimbursement not found.");
+                }
+
+                var stageError = CheckStageActor(request, userId, roles, "return");
+                if (stageError != null)
+                {
+                    return Fail<ReimbursementRequestDto>(stageError);
+                }
+
+                var notes = model.Notes.Trim();
+                var fromStatus = request.Status;
+                request.Status = ReimbursementStatus.ReturnedForCorrection;
+                request.InfoRequestNotes = notes;
+
+                await AddHistoryAsync(request, userId, "ReturnedForCorrection", fromStatus, ReimbursementStatus.ReturnedForCorrection, notes);
+                await QueueNotifyPayeeAsync(request, userId, $"Correction needed on {request.RequestNumber}", notes);
+                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "ReturnForCorrection", userId));
+
+                var saveError = await TrySaveAsync();
+                if (saveError != null)
+                {
+                    return Fail<ReimbursementRequestDto>(saveError);
+                }
+
+                await FlushEmailsAsync();
+                return await BuildResponseAsync(request, "Returned to the member for correction.");
+            }
+            catch (Exception ex)
+            {
+                return Unexpected<ReimbursementRequestDto>(ex, "return the reimbursement");
+            }
+        }
+
+        public async Task<BaseResponse<ReimbursementRequestDto>> RejectAsync(
+            Guid id, RejectReimbursementModel model, Guid userId, IReadOnlyCollection<string> roles)
+        {
+            try
+            {
+                if (Validator.CheckString(model.Reason))
+                {
+                    return Fail<ReimbursementRequestDto>("A rejection reason is required.");
+                }
+
+                var request = await _reimbursementRepository.GetWithDetailsAsync(id);
+                if (request == null)
+                {
+                    return Fail<ReimbursementRequestDto>("Reimbursement not found.");
+                }
+
+                var stageError = CheckStageActor(request, userId, roles, "reject");
+                if (stageError != null)
+                {
+                    return Fail<ReimbursementRequestDto>(stageError);
+                }
+
+                var reason = model.Reason.Trim();
+                var fromStatus = request.Status;
+                request.Status = ReimbursementStatus.Rejected;
+                request.RejectedBy = userId;
+                request.RejectedDate = DateTime.UtcNow;
+                request.RejectionReason = reason;
+
+                await AddHistoryAsync(request, userId, "Rejected", fromStatus, ReimbursementStatus.Rejected, reason);
+                await QueueNotifyPayeeAsync(request, userId, $"Reimbursement {request.RequestNumber} rejected", reason);
+                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Reject", userId));
+
+                var saveError = await TrySaveAsync();
+                if (saveError != null)
+                {
+                    return Fail<ReimbursementRequestDto>(saveError);
+                }
+
+                await FlushEmailsAsync();
+                return await BuildResponseAsync(request, "Reimbursement rejected.");
+            }
+            catch (Exception ex)
+            {
+                return Unexpected<ReimbursementRequestDto>(ex, "reject the reimbursement");
+            }
+        }
+
+        // =====================================================================
+        // Stage three: Accounts Admin final approval and payment
+        // =====================================================================
+
+        public async Task<BaseResponse<ReimbursementRequestDto>> ApproveAsync(
+            Guid id, ReimbursementDecisionModel model, Guid userId, IReadOnlyCollection<string> roles)
+        {
+            try
+            {
+                if (!roles.Contains(AccountsAdminRole))
+                {
+                    return Fail<ReimbursementRequestDto>("Only an Accounts Admin can give final approval.");
+                }
+
+                var request = await _reimbursementRepository.GetWithDetailsAsync(id);
+                if (request == null)
+                {
+                    return Fail<ReimbursementRequestDto>("Reimbursement not found.");
+                }
+
+                if (request.PayeeUserId == userId)
+                {
+                    return Fail<ReimbursementRequestDto>("You cannot approve your own reimbursement.");
+                }
+
+                if (request.Status != ReimbursementStatus.PendingApproval)
+                {
+                    return Fail<ReimbursementRequestDto>(
+                        $"Only requests that have passed accounts review can be approved. This one is {Describe(request.Status)}.");
+                }
+
+                if (request.ReviewedBy == userId)
+                {
+                    return Fail<ReimbursementRequestDto>("The person who reviewed a request cannot also give its final approval.");
+                }
+
+                var approvedAmount = model.ApprovedAmount ?? request.TotalAmount;
+                approvedAmount = Math.Round(approvedAmount, 2, MidpointRounding.AwayFromZero);
+                if (approvedAmount <= 0)
+                {
+                    return Fail<ReimbursementRequestDto>("The approved amount must be greater than zero.");
+                }
+
+                if (approvedAmount > request.TotalAmount)
+                {
+                    return Fail<ReimbursementRequestDto>($"The approved amount cannot be more than the requested total of {FormatMoney(request.TotalAmount)}.");
+                }
+
+                var notes = model.Notes?.Trim();
+                if (approvedAmount < request.TotalAmount && string.IsNullOrWhiteSpace(notes))
+                {
+                    return Fail<ReimbursementRequestDto>("Add a note explaining why less than the requested total is being approved.");
+                }
+
+                // Budget is checked on the server at the moment of approval. Going over
+                // budget is allowed, but only with a recorded justification.
+                var budget = await _budgetService.GetRequestBudgetAsync(request, approvedAmount);
+                var justification = model.OverBudgetJustification?.Trim();
+                if (budget.RequiresOverBudgetJustification && string.IsNullOrWhiteSpace(justification))
+                {
+                    return Fail<ReimbursementRequestDto>(
+                        "This approval would exceed the department's budget. Enter a justification to approve it over budget.");
+                }
+
+                request.Status = ReimbursementStatus.Approved;
+                request.ApprovedBy = userId;
+                request.ApprovedDate = DateTime.UtcNow;
+                request.ApprovedAmount = approvedAmount;
+                request.ApprovalNotes = notes;
+                request.OverBudgetAtApproval = budget.RequiresOverBudgetJustification;
+                request.OverBudgetJustification = budget.RequiresOverBudgetJustification ? justification : null;
+                request.PreparedBy = model.PreparedBy?.Trim() ?? request.PreparedBy;
+                request.ChequeNumber = model.ChequeNumber?.Trim() ?? request.ChequeNumber;
+                request.AuthorizedByName1 = model.AuthorizedByName1?.Trim() ?? request.AuthorizedByName1;
+                request.AuthorizedByName2 = model.AuthorizedByName2?.Trim() ?? request.AuthorizedByName2;
+                request.AuthorizationDate = Validator.AsUtc(model.AuthorizationDate) ?? request.AuthorizationDate;
+
+                var historyNote = string.IsNullOrWhiteSpace(notes) ? "Final approval given." : notes;
+                historyNote += $" Approved amount {FormatMoney(approvedAmount)}.";
+                if (budget.RequiresOverBudgetJustification)
+                {
+                    historyNote += $" Approved over budget. Justification: {justification}";
+                }
+
+                await AddHistoryAsync(request, userId, "Approved", ReimbursementStatus.PendingApproval, ReimbursementStatus.Approved, historyNote);
+                await QueueNotifyPayeeAsync(
+                    request,
+                    userId,
+                    $"Reimbursement {request.RequestNumber} approved",
+                    $"Your request was approved for {FormatMoney(approvedAmount)}. You will be notified again when payment is made.");
+                await QueueNotifyReviewerAsync(
+                    request,
+                    userId,
+                    $"Reimbursement {request.RequestNumber} approved",
+                    $"{request.PayeeName}'s request was approved for {FormatMoney(approvedAmount)} and is awaiting payment.");
+                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Approve", userId,
+                    budget.RequiresOverBudgetJustification ? $"Over budget. Justification: {justification}" : null));
+
+                var saveError = await TrySaveAsync();
+                if (saveError != null)
+                {
+                    return Fail<ReimbursementRequestDto>(saveError);
+                }
+
+                await FlushEmailsAsync();
+                return await BuildResponseAsync(request, "Approved. Payment has not been recorded yet.");
+            }
+            catch (Exception ex)
+            {
+                return Unexpected<ReimbursementRequestDto>(ex, "approve the reimbursement");
+            }
+        }
+
+        public async Task<BaseResponse<ReimbursementRequestDto>> RecordPaymentAsync(
+            Guid id, RecordReimbursementPaymentModel model, Guid userId, IReadOnlyCollection<string> roles)
+        {
+            try
+            {
+                if (!roles.Contains(AccountsAdminRole))
+                {
+                    return Fail<ReimbursementRequestDto>("Only an Accounts Admin can confirm payment.");
+                }
+
+                var request = await _reimbursementRepository.GetWithDetailsAsync(id);
+                if (request == null)
+                {
+                    return Fail<ReimbursementRequestDto>("Reimbursement not found.");
+                }
+
+                if (request.PayeeUserId == userId)
+                {
+                    return Fail<ReimbursementRequestDto>("You cannot confirm payment of your own reimbursement.");
+                }
+
+                if (request.Status == ReimbursementStatus.Paid)
+                {
+                    return Fail<ReimbursementRequestDto>("Payment for this request has already been confirmed.");
+                }
+
+                if (request.Status != ReimbursementStatus.Approved)
+                {
+                    return Fail<ReimbursementRequestDto>($"Payment can only be confirmed after final approval. This request is {Describe(request.Status)}.");
+                }
+
+                var amount = Math.Round(model.AmountPaid, 2, MidpointRounding.AwayFromZero);
+                var committed = request.ApprovedAmount ?? request.TotalAmount;
+
+                if (amount <= 0)
+                {
+                    return Fail<ReimbursementRequestDto>("The amount paid must be greater than zero.");
+                }
+
+                if (amount > committed)
+                {
+                    return Fail<ReimbursementRequestDto>($"The amount paid cannot be more than the approved amount of {FormatMoney(committed)}.");
+                }
+
+                if (Validator.CheckString(model.PaymentMethod))
+                {
+                    return Fail<ReimbursementRequestDto>("Payment method is required.");
+                }
+
+                if (amount != committed && string.IsNullOrWhiteSpace(model.FinanceNotes))
+                {
+                    return Fail<ReimbursementRequestDto>("Add a finance note explaining the difference between the approved amount and the amount paid.");
+                }
+
+                var paymentDate = model.PaymentDate == default ? DateTime.UtcNow : Validator.AsUtc(model.PaymentDate);
+                if (paymentDate.Date > DateTime.UtcNow.Date.AddDays(1))
+                {
+                    return Fail<ReimbursementRequestDto>("The payment date cannot be in the future.");
+                }
+
+                if (request.ApprovedDate.HasValue && paymentDate.Date < request.ApprovedDate.Value.Date)
+                {
+                    return Fail<ReimbursementRequestDto>("The payment date cannot be before the approval date.");
+                }
+
+                request.Status = ReimbursementStatus.Paid;
+                request.PaidBy = userId;
+                request.PaymentDate = paymentDate;
+                request.PaymentConfirmedAt = DateTime.UtcNow;
+                request.AmountPaid = amount;
+                request.PaymentMethod = model.PaymentMethod.Trim();
+                request.PaymentReference = model.PaymentReference?.Trim();
+                request.PreparedBy = model.PreparedBy?.Trim() ?? request.PreparedBy;
+                request.ChequeNumber = model.ChequeNumber?.Trim() ?? request.ChequeNumber;
+                request.AuthorizedByName1 = model.AuthorizedByName1?.Trim() ?? request.AuthorizedByName1;
+                request.AuthorizedByName2 = model.AuthorizedByName2?.Trim() ?? request.AuthorizedByName2;
+                request.AuthorizationDate = Validator.AsUtc(model.AuthorizationDate) ?? request.AuthorizationDate;
+                request.FinanceNotes = model.FinanceNotes?.Trim();
+
+                var note = $"Paid {FormatMoney(amount)} via {request.PaymentMethod} on {paymentDate:yyyy-MM-dd}.";
+                if (!string.IsNullOrWhiteSpace(request.PaymentReference))
+                {
+                    note += $" Reference {request.PaymentReference}.";
+                }
+
+                await AddHistoryAsync(request, userId, "Paid", ReimbursementStatus.Approved, ReimbursementStatus.Paid, note);
+                await QueueNotifyPayeeAsync(
+                    request,
+                    userId,
+                    $"Reimbursement {request.RequestNumber} paid",
+                    $"{FormatMoney(amount)} was paid via {request.PaymentMethod}.");
+                await QueueNotifyReviewerAsync(
+                    request,
+                    userId,
+                    $"Reimbursement {request.RequestNumber} paid",
+                    $"{request.PayeeName}'s reimbursement of {FormatMoney(amount)} was paid.");
+                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "ConfirmPayment", userId, note));
+
+                var saveError = await TrySaveAsync();
+                if (saveError != null)
+                {
+                    return Fail<ReimbursementRequestDto>(saveError);
+                }
+
+                await FlushEmailsAsync();
+                return await BuildResponseAsync(request, "Payment confirmed.");
+            }
+            catch (Exception ex)
+            {
+                return Unexpected<ReimbursementRequestDto>(ex, "confirm the payment");
+            }
+        }
+
+        // =====================================================================
+        // Reading
+        // =====================================================================
 
         public async Task<BaseResponse<ReimbursementRequestDto>> GetAsync(Guid id, Guid userId, IReadOnlyCollection<string> roles)
         {
@@ -503,14 +788,15 @@ namespace ChurchPortal.Services.Implementations
 
                 if (!IsPrivileged(roles) && request.PayeeUserId != userId)
                 {
-                    return Fail<ReimbursementRequestDto>("You do not have access to this reimbursement.");
+                    // Same message as "not found" so ids of other people's requests are not confirmed.
+                    return Fail<ReimbursementRequestDto>("Reimbursement not found.");
                 }
 
                 return await BuildResponseAsync(request, "Reimbursement found.");
             }
             catch (Exception ex)
             {
-                return Fail<ReimbursementRequestDto>(ex.Message);
+                return Unexpected<ReimbursementRequestDto>(ex, "load the reimbursement");
             }
         }
 
@@ -518,31 +804,54 @@ namespace ChurchPortal.Services.Implementations
         {
             try
             {
-                var requests = IsPrivileged(roles)
-                    ? await _reimbursementRepository.GetAllWithDetailsAsync(_ => true)
+                var privileged = IsPrivileged(roles);
+                var requests = privileged
+                    // Officers and admins see submitted requests; other people's drafts stay private.
+                    ? await _reimbursementRepository.GetAllWithDetailsAsync(r => r.Status != ReimbursementStatus.Draft || r.PayeeUserId == userId)
                     : await _reimbursementRepository.GetAllWithDetailsAsync(r => r.PayeeUserId == userId);
 
-                var receiptCounts = await _reimbursementRepository.GetReceiptCountsAsync(requests.Select(r => r.Id).ToList());
-                var emails = new Dictionary<Guid, string?>();
+                var ids = requests.Select(r => r.Id).ToList();
+                var receipts = await _reimbursementRepository.GetReceiptMetadataAsync(ids);
+                var names = await _userRepository.GetDisplayNamesAsync(requests.SelectMany(ActorIds));
+                var emails = await GetEmailsAsync(requests.Select(r => r.PayeeUserId));
 
-                foreach (var payeeId in requests.Select(r => r.PayeeUserId).Distinct())
-                {
-                    var payee = await _userRepository.GetByIdAsync(payeeId);
-                    emails[payeeId] = payee?.Email;
-                }
-
-                var data = requests.Select(request =>
-                {
-                    var dto = ToDto(request, emails.TryGetValue(request.PayeeUserId, out var email) ? email : null);
-                    dto.ReceiptCount = receiptCounts.TryGetValue(request.Id, out var count) ? count : 0;
-                    return dto;
-                }).ToList();
+                var data = requests
+                    .Select(r => ToDto(
+                        r,
+                        emails.TryGetValue(r.PayeeUserId, out var email) ? email : null,
+                        names,
+                        receipts.TryGetValue(r.Id, out var list) ? list : []))
+                    .ToList();
 
                 return new BaseResponse<ICollection<ReimbursementRequestDto>> { Message = "Reimbursements found.", Status = true, Data = data };
             }
             catch (Exception ex)
             {
-                return Fail<ICollection<ReimbursementRequestDto>>(ex.Message);
+                return Unexpected<ICollection<ReimbursementRequestDto>>(ex, "load reimbursements");
+            }
+        }
+
+        public async Task<BaseResponse<ReimbursementBudgetDto>> GetBudgetAsync(Guid id, decimal? amount, Guid userId, IReadOnlyCollection<string> roles)
+        {
+            try
+            {
+                if (!IsPrivileged(roles))
+                {
+                    return Fail<ReimbursementBudgetDto>("Only Accounts staff can see budget figures.");
+                }
+
+                var request = await _reimbursementRepository.GetWithDetailsAsync(id);
+                if (request == null)
+                {
+                    return Fail<ReimbursementBudgetDto>("Reimbursement not found.");
+                }
+
+                var budget = await _budgetService.GetRequestBudgetAsync(request, amount);
+                return new BaseResponse<ReimbursementBudgetDto> { Message = "Budget calculated.", Status = true, Data = budget };
+            }
+            catch (Exception ex)
+            {
+                return Unexpected<ReimbursementBudgetDto>(ex, "calculate the budget");
             }
         }
 
@@ -556,15 +865,11 @@ namespace ChurchPortal.Services.Implementations
                     return Fail<ReceiptFileDto>("Receipt not found.");
                 }
 
-                var request = await _reimbursementRepository.GetWithDetailsAsync(receipt.ReimbursementRequestId);
-                if (request == null)
+                var ownerId = await _reimbursementRepository.GetAllAsync(r => r.Id == receipt.ReimbursementRequestId && !r.IsDeleted);
+                var request = ownerId.FirstOrDefault();
+                if (request == null || (!IsPrivileged(roles) && request.PayeeUserId != userId))
                 {
-                    return Fail<ReceiptFileDto>("Reimbursement not found.");
-                }
-
-                if (!IsPrivileged(roles) && request.PayeeUserId != userId)
-                {
-                    return Fail<ReceiptFileDto>("You do not have access to this receipt.");
+                    return Fail<ReceiptFileDto>("Receipt not found.");
                 }
 
                 return new BaseResponse<ReceiptFileDto>
@@ -576,9 +881,13 @@ namespace ChurchPortal.Services.Implementations
             }
             catch (Exception ex)
             {
-                return Fail<ReceiptFileDto>(ex.Message);
+                return Unexpected<ReceiptFileDto>(ex, "load the receipt");
             }
         }
+
+        // =====================================================================
+        // Notifications
+        // =====================================================================
 
         public async Task<BaseResponse<ICollection<NotificationDto>>> GetNotificationsAsync(Guid userId)
         {
@@ -600,7 +909,7 @@ namespace ChurchPortal.Services.Implementations
             }
             catch (Exception ex)
             {
-                return Fail<ICollection<NotificationDto>>(ex.Message);
+                return Unexpected<ICollection<NotificationDto>>(ex, "load notifications");
             }
         }
 
@@ -613,7 +922,7 @@ namespace ChurchPortal.Services.Implementations
             }
             catch (Exception ex)
             {
-                return Fail<int>(ex.Message);
+                return Unexpected<int>(ex, "count notifications");
             }
         }
 
@@ -626,13 +935,93 @@ namespace ChurchPortal.Services.Implementations
             }
             catch (Exception ex)
             {
-                return Fail<bool>(ex.Message);
+                return Unexpected<bool>(ex, "update notifications");
             }
+        }
+
+        // =====================================================================
+        // Rules
+        // =====================================================================
+
+        private static bool IsAwaitingReview(ReimbursementStatus status) =>
+            status is ReimbursementStatus.UnderReview or ReimbursementStatus.LegacyAccountsReview;
+
+        /// <summary>
+        /// Return and reject belong to whoever owns the current stage:
+        /// the Accounts Officer while Under Review, the Accounts Admin while Pending Approval.
+        /// </summary>
+        private static string? CheckStageActor(ReimbursementRequest request, Guid userId, IReadOnlyCollection<string> roles, string verb)
+        {
+            if (request.PayeeUserId == userId)
+            {
+                return $"You cannot {verb} your own reimbursement.";
+            }
+
+            if (IsAwaitingReview(request.Status))
+            {
+                return roles.Contains(AccountsOfficerRole)
+                    ? null
+                    : $"While a request is under review, only an Accounts Officer can {verb} it.";
+            }
+
+            if (request.Status == ReimbursementStatus.PendingApproval)
+            {
+                return roles.Contains(AccountsAdminRole)
+                    ? null
+                    : $"While a request is pending approval, only an Accounts Admin can {verb} it.";
+            }
+
+            return $"A request that is {Describe(request.Status)} cannot be {(verb == "return" ? "returned" : "rejected")}.";
+        }
+
+        private static bool IsPrivileged(IReadOnlyCollection<string> roles) =>
+            roles.Contains(AccountsOfficerRole) || roles.Contains(AccountsAdminRole);
+
+        private sealed record ClassificationResult(
+            ReimbursementClassification Classification,
+            Guid? DepartmentId,
+            string DisplayName,
+            string? Error);
+
+        /// <summary>
+        /// Validates the department choice on the server. A department must exist and be
+        /// active. When editing, keeping the department already on the request is allowed
+        /// even if it has since been deactivated; submitting is then blocked with a clear message.
+        /// </summary>
+        private async Task<ClassificationResult> ResolveClassificationAsync(
+            ReimbursementClassification classification, Guid? departmentId, Guid? currentDepartmentId)
+        {
+            if (!Enum.IsDefined(classification))
+            {
+                return new ClassificationResult(classification, null, string.Empty, "Choose a department or Personal Use.");
+            }
+
+            if (classification == ReimbursementClassification.PersonalUse)
+            {
+                return new ClassificationResult(classification, null, PersonalUseLabel, null);
+            }
+
+            if (departmentId == null || departmentId == Guid.Empty)
+            {
+                return new ClassificationResult(classification, null, string.Empty, "Choose a department or Personal Use.");
+            }
+
+            var department = await _departmentRepository.GetByIdAsync(departmentId.Value);
+            if (department == null)
+            {
+                return new ClassificationResult(classification, null, string.Empty, "The selected department does not exist.");
+            }
+
+            if (!department.IsActive && department.Id != currentDepartmentId)
+            {
+                return new ClassificationResult(classification, null, string.Empty, $"{department.Name} is no longer accepting new requests.");
+            }
+
+            return new ClassificationResult(classification, department.Id, department.Name, null);
         }
 
         private static string? ValidateFields(
             string? payeeName,
-            string? department,
             string? ministerInCharge,
             IEnumerable<ReimbursementItemRequestModel>? items,
             out List<ReimbursementItem> builtItems)
@@ -642,11 +1031,6 @@ namespace ChurchPortal.Services.Implementations
             if (Validator.CheckString(payeeName))
             {
                 return "Payee name is required.";
-            }
-
-            if (Validator.CheckString(department))
-            {
-                return "Department is required.";
             }
 
             if (Validator.CheckString(ministerInCharge))
@@ -791,19 +1175,167 @@ namespace ChurchPortal.Services.Implementations
             return true;
         }
 
+        // =====================================================================
+        // Saving, history and notifications
+        // =====================================================================
+
+        private async Task<string?> TrySaveAsync()
+        {
+            try
+            {
+                await _unitOfWork.SaveChangesAsync();
+                return null;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogWarning(ex, "Concurrent change detected on a reimbursement.");
+                _pendingEmails.Clear();
+                return ConcurrencyMessage;
+            }
+        }
+
+        private async Task AddHistoryAsync(
+            ReimbursementRequest request,
+            Guid actorId,
+            string action,
+            ReimbursementStatus? fromStatus,
+            ReimbursementStatus? toStatus,
+            string? notes)
+        {
+            var names = await _userRepository.GetDisplayNamesAsync([actorId]);
+            var history = new ReimbursementHistory
+            {
+                ReimbursementRequestId = request.Id,
+                ActorUserId = actorId,
+                ActorName = names.TryGetValue(actorId, out var name) ? name : null,
+                Action = action,
+                FromStatus = fromStatus,
+                ToStatus = toStatus,
+                Notes = notes,
+                Timestamp = DateTime.UtcNow
+            };
+
+            request.History.Add(history);
+            _reimbursementRepository.TrackAsAdded(history);
+        }
+
+        private async Task QueueNotifyPayeeAsync(ReimbursementRequest request, Guid actorId, string title, string message)
+        {
+            var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
+            if (payee != null)
+            {
+                await QueueNotifyAsync([payee], actorId, title, message, request.Id);
+            }
+        }
+
+        private async Task QueueNotifyReviewerAsync(ReimbursementRequest request, Guid actorId, string title, string message)
+        {
+            if (request.ReviewedBy is not Guid reviewerId)
+            {
+                return;
+            }
+
+            var reviewer = await _userRepository.GetByIdAsync(reviewerId);
+            if (reviewer != null)
+            {
+                await QueueNotifyAsync([reviewer], actorId, title, message, request.Id);
+            }
+        }
+
+        private async Task QueueNotifyAsync(IEnumerable<User> users, Guid actorId, string title, string message, Guid requestId)
+        {
+            foreach (var user in users.Where(u => u.Id != actorId).DistinctBy(u => u.Id))
+            {
+                await _notificationRepository.CreateAsync(new Notification
+                {
+                    UserId = user.Id,
+                    Title = title,
+                    Message = message,
+                    Link = $"/reimbursements/{requestId}",
+                    ReimbursementRequestId = requestId
+                });
+
+                if (!string.IsNullOrWhiteSpace(user.Email))
+                {
+                    _pendingEmails.Add((user.Email, title, message));
+                }
+            }
+        }
+
+        private async Task FlushEmailsAsync()
+        {
+            if (!_emailSender.IsConfigured)
+            {
+                _pendingEmails.Clear();
+                return;
+            }
+
+            foreach (var (to, title, message) in _pendingEmails)
+            {
+                try
+                {
+                    await _emailSender.SendAsync(to, title, EmailTemplates.Notification(title, message, null));
+                }
+                catch (Exception ex)
+                {
+                    // Best effort: the in-app notification is already saved.
+                    _logger.LogWarning(ex, "Notification email '{Title}' to {To} failed.", title, to);
+                }
+            }
+
+            _pendingEmails.Clear();
+        }
+
+        // =====================================================================
+        // Mapping
+        // =====================================================================
+
+        private static IEnumerable<Guid> ActorIds(ReimbursementRequest r)
+        {
+            if (r.ReviewedBy is Guid reviewed) yield return reviewed;
+            if (r.ApprovedBy is Guid approved) yield return approved;
+            if (r.PaidBy is Guid paid) yield return paid;
+            if (r.RejectedBy is Guid rejected) yield return rejected;
+        }
+
+        private async Task<Dictionary<Guid, string?>> GetEmailsAsync(IEnumerable<Guid> userIds)
+        {
+            var result = new Dictionary<Guid, string?>();
+            foreach (var id in userIds.Distinct())
+            {
+                var user = await _userRepository.GetByIdAsync(id);
+                result[id] = user?.Email;
+            }
+
+            return result;
+        }
+
         private async Task<BaseResponse<ReimbursementRequestDto>> BuildResponseAsync(ReimbursementRequest request, string message)
         {
             var payee = await _userRepository.GetByIdAsync(request.PayeeUserId);
+            var names = await _userRepository.GetDisplayNamesAsync(ActorIds(request));
             return new BaseResponse<ReimbursementRequestDto>
             {
                 Message = message,
                 Status = true,
-                Data = ToDto(request, payee?.Email)
+                Data = ToDto(request, payee?.Email, names, request.Receipts)
             };
         }
 
-        private static ReimbursementRequestDto ToDto(ReimbursementRequest request, string? payeeEmail)
+        private static ReimbursementRequestDto ToDto(
+            ReimbursementRequest request,
+            string? payeeEmail,
+            IReadOnlyDictionary<Guid, string> names,
+            IEnumerable<ReimbursementReceipt> receipts)
         {
+            string? NameOf(Guid? id) => id is Guid value && names.TryGetValue(value, out var n) ? n : null;
+
+            var receiptList = receipts.Where(r => !r.IsDeleted).OrderByDescending(r => r.CreatedDate).ToList();
+            var isPersonal = request.Classification == ReimbursementClassification.PersonalUse;
+            var departmentName = isPersonal
+                ? PersonalUseLabel
+                : request.DepartmentRecord?.Name ?? request.Department;
+
             return new ReimbursementRequestDto
             {
                 Id = request.Id,
@@ -811,7 +1343,10 @@ namespace ChurchPortal.Services.Implementations
                 PayeeUserId = request.PayeeUserId,
                 PayeeEmail = payeeEmail,
                 PayeeName = request.PayeeName,
-                Department = request.Department,
+                Department = departmentName,
+                Classification = request.Classification,
+                DepartmentId = request.DepartmentId,
+                NeedsDepartmentLink = !isPersonal && request.DepartmentId == null,
                 MinisterInCharge = request.MinisterInCharge,
                 RequestDate = request.RequestDate,
                 Remarks = request.Remarks,
@@ -822,12 +1357,21 @@ namespace ChurchPortal.Services.Implementations
                 TotalAmount = request.TotalAmount,
                 Status = request.Status,
                 StatusName = request.Status.ToString(),
-                ReceiptCount = request.Receipts.Count(r => !r.IsDeleted),
+                ReceiptCount = receiptList.Count,
                 SubmittedDate = request.SubmittedDate,
                 MinisterApprovedDate = request.MinisterApprovedDate,
                 ReviewedDate = request.ReviewedDate,
+                ReviewedByName = NameOf(request.ReviewedBy),
+                ReviewNotes = request.ReviewNotes,
                 ApprovedDate = request.ApprovedDate,
+                ApprovedByName = NameOf(request.ApprovedBy),
+                ApprovedAmount = request.ApprovedAmount,
+                ApprovalNotes = request.ApprovalNotes,
+                OverBudgetAtApproval = request.OverBudgetAtApproval,
+                OverBudgetJustification = request.OverBudgetJustification,
                 PaymentDate = request.PaymentDate,
+                PaymentConfirmedAt = request.PaymentConfirmedAt,
+                PaidByName = NameOf(request.PaidBy),
                 AmountPaid = request.AmountPaid,
                 PaymentMethod = request.PaymentMethod,
                 PaymentReference = request.PaymentReference,
@@ -837,6 +1381,8 @@ namespace ChurchPortal.Services.Implementations
                 AuthorizedByName2 = request.AuthorizedByName2,
                 AuthorizationDate = request.AuthorizationDate,
                 FinanceNotes = request.FinanceNotes,
+                RejectedDate = request.RejectedDate,
+                RejectedByName = NameOf(request.RejectedBy),
                 RejectionReason = request.RejectionReason,
                 InfoRequestNotes = request.InfoRequestNotes,
                 CreatedDate = request.CreatedDate,
@@ -857,9 +1403,7 @@ namespace ChurchPortal.Services.Implementations
                         ScreeningNote = i.ScreeningNote
                     })
                     .ToList(),
-                Receipts = request.Receipts
-                    .Where(r => !r.IsDeleted)
-                    .OrderByDescending(r => r.CreatedDate)
+                Receipts = receiptList
                     .Select(r => new ReimbursementReceiptDto
                     {
                         Id = r.Id,
@@ -871,6 +1415,7 @@ namespace ChurchPortal.Services.Implementations
                     })
                     .ToList(),
                 History = request.History
+                    .Where(h => !h.IsDeleted)
                     .OrderByDescending(h => h.Timestamp)
                     .Select(h => new ReimbursementHistoryDto
                     {
@@ -887,106 +1432,28 @@ namespace ChurchPortal.Services.Implementations
             };
         }
 
-        private async Task AddHistoryAsync(
-            ReimbursementRequest request,
-            Guid actorId,
-            string action,
-            ReimbursementStatus? fromStatus,
-            ReimbursementStatus? toStatus,
-            string? notes)
+        private static string Describe(ReimbursementStatus status) => status switch
         {
-            var history = BuildHistory(request.Id, actorId, await GetActorNameAsync(actorId), action, fromStatus, toStatus, notes);
-            request.History.Add(history);
-            _reimbursementRepository.TrackAsAdded(history);
-        }
+            ReimbursementStatus.Draft => "a draft",
+            ReimbursementStatus.UnderReview => "under review",
+            ReimbursementStatus.LegacyAccountsReview => "under review",
+            ReimbursementStatus.PendingApproval => "pending approval",
+            ReimbursementStatus.Approved => "approved and awaiting payment",
+            ReimbursementStatus.Paid => "already paid",
+            ReimbursementStatus.Rejected => "rejected",
+            ReimbursementStatus.ReturnedForCorrection => "back with the member for correction",
+            _ => status.ToString()
+        };
 
-        private static ReimbursementHistory BuildHistory(
-            Guid requestId,
-            Guid actorId,
-            string? actorName,
-            string action,
-            ReimbursementStatus? fromStatus,
-            ReimbursementStatus? toStatus,
-            string? notes)
-        {
-            return new ReimbursementHistory
-            {
-                ReimbursementRequestId = requestId,
-                ActorUserId = actorId,
-                ActorName = actorName,
-                Action = action,
-                FromStatus = fromStatus,
-                ToStatus = toStatus,
-                Notes = notes,
-                Timestamp = DateTime.UtcNow
-            };
-        }
-
-        private async Task<string?> GetActorNameAsync(Guid userId)
-        {
-            var user = await _userRepository.GetByIdAsync(userId);
-            return user?.DisplayName ?? user?.Email;
-        }
-
-        private async Task<bool> IsAccountsAdminAsync(Guid userId)
-        {
-            var user = await _userRepository.GetByIdAsync(userId);
-            return user?.UserRoles.Any(ur => ur.Role?.Name == AccountsAdminRole) == true;
-        }
-
-        private async Task<List<User>> GetUsersByRolesAsync(params string[] roleNames)
-        {
-            var users = new List<User>();
-
-            foreach (var roleName in roleNames)
-            {
-                users.AddRange(await _userRepository.GetUsersByRoleAsync(roleName));
-            }
-
-            return users.DistinctBy(u => u.Id).ToList();
-        }
-
-        private async Task NotifyAsync(IEnumerable<User> users, Guid actorId, string title, string message, Guid requestId)
-        {
-            foreach (var user in users.Where(u => u.Id != actorId).DistinctBy(u => u.Id))
-            {
-                await _notificationRepository.CreateAsync(new Notification
-                {
-                    UserId = user.Id,
-                    Title = title,
-                    Message = message,
-                    Link = $"/reimbursements/{requestId}",
-                    ReimbursementRequestId = requestId
-                });
-
-                try
-                {
-                    await _emailSender.SendAsync(
-                        user.Email,
-                        title,
-                        EmailTemplates.Notification(title, message, null));
-                }
-                catch (Exception ex)
-                {
-                    // Email delivery is best-effort; the in-app notification is still recorded.
-                    Console.WriteLine($"[email] Notification '{title}' to {user.Email} failed: {ex.Message}");
-                }
-            }
-        }
-
-        private static bool IsPrivileged(IReadOnlyCollection<string> roles)
-        {
-            return roles.Contains(AccountsOfficerRole) || roles.Contains(AccountsAdminRole) || roles.Contains(PastorRole);
-        }
-
-        private static AuditLog NewAudit(Guid entityId, string action, Guid userId)
+        private static AuditLog NewAudit(Guid entityId, string action, Guid userId, string? details = null)
         {
             return new AuditLog
             {
                 EntityName = nameof(ReimbursementRequest),
                 EntityId = entityId,
                 Action = action,
-                UserId = userId
+                UserId = userId,
+                Details = details
             };
         }
 
@@ -998,6 +1465,12 @@ namespace ChurchPortal.Services.Implementations
         private static BaseResponse<T> Fail<T>(string message)
         {
             return new BaseResponse<T> { Message = message, Status = false, Data = default };
+        }
+
+        private BaseResponse<T> Unexpected<T>(Exception ex, string action)
+        {
+            _logger.LogError(ex, "Failed to {Action}.", action);
+            return Fail<T>($"Something went wrong while trying to {action}. Please try again.");
         }
     }
 }

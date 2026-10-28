@@ -273,12 +273,14 @@ namespace ChurchPortal.Services.Implementations
                 if (month.HasValue && month.Value != default)
                     joined = joined.Where(x => InMonth(x.Service, month.Value)).ToList();
 
+                // Group by pastor record when linked, so spelling variations no longer split
+                // one person's figures. Older unlinked services fall back to their typed name.
                 var result = joined
-                    .Where(x => !string.IsNullOrWhiteSpace(x.Service.Preacher))
-                    .GroupBy(x => x.Service.Preacher!)
+                    .Where(x => x.Service.PastorId != null || !string.IsNullOrWhiteSpace(x.Service.Preacher))
+                    .GroupBy(x => x.Service.PastorId?.ToString() ?? "text:" + NameNormalizer.Normalize(x.Service.Preacher))
                     .Select(g => new PreacherImpactDto
                     {
-                        Preacher = g.Key,
+                        Preacher = g.Select(x => x.Service.Preacher).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p)) ?? "Unknown",
                         TotalAttendance = g.Sum(x => x.Attendance.Total),
                         AverageAttendance = g.Average(x => x.Attendance.Total),
                         ServiceCount = g.Count()

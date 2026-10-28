@@ -17,7 +17,7 @@ namespace ChurchPortal.Services.Interfaces
 
         public const string DefaultFrom = "notifications@updates.rccghephzibahmanitoba.org";
         public const string DefaultFromName = "Hephzibah Church";
-        public const string DefaultFrontendBaseUrl = "https://hepzibahreactrepo.vercel.app";
+        public const string DefaultFrontendBaseUrl = "https://reportportal.rccghephzibahmanitoba.org";
     }
 
     /// <summary>

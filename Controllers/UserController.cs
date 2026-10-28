@@ -4,6 +4,7 @@ using ChurchPortal.Core.Dtos.UserDtos;
 using ChurchPortal.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ChurchPortal.Controllers
 {
@@ -33,6 +34,30 @@ namespace ChurchPortal.Controllers
                 return Ok(result);
             }
             return BadRequest(result);
+        }
+
+        /// <summary>
+        /// Public member sign-up. Always creates a ChurchMember; there is no role field.
+        /// Returns a token so the new member is signed in straight away.
+        /// </summary>
+        [AllowAnonymous]
+        [EnableRateLimiting("signup")]
+        [HttpPost("signup")]
+        public async Task<IActionResult> SignUp([FromBody] SignUpRequestModel model)
+        {
+            var result = await _userService.SignUpAsync(model);
+            if (!result.Status || result.Data == null)
+            {
+                return BadRequest(result);
+            }
+
+            var token = _authService.GenerateToken(result.Data);
+            return Ok(new
+            {
+                message = result.Message,
+                token,
+                user = result.Data
+            });
         }
 
         [HttpPost("login")]

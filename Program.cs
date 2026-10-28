@@ -10,6 +10,8 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 
 // ASP.NET Core never reads .env files on its own, so the Resend key that lives
 // in .env was invisible to the app when it ran locally. Load it here, before
@@ -107,6 +109,24 @@ builder.Services.AddScoped<IFellowshipReportService, FellowshipReportService>();
 builder.Services.AddScoped<IInventoryReportService, InventoryReportService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
+builder.Services.AddScoped<IBudgetService, BudgetService>();
+builder.Services.AddScoped<IDepartmentService, DepartmentService>();
+builder.Services.AddScoped<IPastorService, PastorService>();
+builder.Services.AddScoped<IFinancialReportService, FinancialReportService>();
+builder.Services.Configure<BudgetOptions>(builder.Configuration.GetSection("Budget"));
+
+// Public sign-up is the only anonymous write endpoint; slow down scripted abuse.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("signup", limiter =>
+    {
+        limiter.PermitLimit = 20;
+        limiter.Window = TimeSpan.FromMinutes(10);
+        limiter.QueueLimit = 0;
+        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+});
 
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 builder.Services.PostConfigure<EmailOptions>(options =>
@@ -148,6 +168,8 @@ builder.Services.AddScoped<IInventoryItemRepository, InventoryItemRepository>();
 builder.Services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
 builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<IDepartmentRepository, DepartmentRepository>();
+builder.Services.AddScoped<IPastorRepository, PastorRepository>();
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
@@ -170,6 +192,7 @@ using (var scope = app.Services.CreateScope())
     await InventorySeeder.SeedAsync(context);
     await UserSeeder.SeedAsync(context);
     await FellowshipCenterSeeder.SeedAsync(context);
+    await ReimbursementLegacyFixer.RunAsync(context, app.Logger);
 }
 
 if (!app.Environment.IsDevelopment())
@@ -186,6 +209,7 @@ app.UseCors("AllowAll");
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 

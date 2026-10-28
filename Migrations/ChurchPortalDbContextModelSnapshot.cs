@@ -117,6 +117,58 @@ namespace ChurchPortal.Migrations
                     b.ToTable("AuditLogs");
                 });
 
+            modelBuilder.Entity("ChurchPortal.Core.Entities.Department", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AnnualBudget")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("MonthlyBudget")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedName")
+                        .IsUnique();
+
+                    b.ToTable("Departments", t =>
+                        {
+                            t.HasCheckConstraint("CK_Departments_AnnualBudget_NonNegative", "\"AnnualBudget\" >= 0");
+
+                            t.HasCheckConstraint("CK_Departments_MonthlyBudget_NonNegative", "\"MonthlyBudget\" IS NULL OR \"MonthlyBudget\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("ChurchPortal.Core.Entities.FellowshipAttendance", b =>
                 {
                     b.Property<Guid>("Id")
@@ -295,6 +347,53 @@ namespace ChurchPortal.Migrations
                     b.ToTable("Notifications");
                 });
 
+            modelBuilder.Entity("ChurchPortal.Core.Entities.Pastor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("UpdatedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedName");
+
+                    b.ToTable("Pastors");
+                });
+
             modelBuilder.Entity("ChurchPortal.Core.Entities.ReimbursementHistory", b =>
                 {
                     b.Property<Guid>("Id")
@@ -334,7 +433,7 @@ namespace ChurchPortal.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ReimbursementRequestId");
+                    b.HasIndex("ReimbursementRequestId", "Timestamp");
 
                     b.ToTable("ReimbursementHistories");
                 });
@@ -447,6 +546,13 @@ namespace ChurchPortal.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<string>("ApprovalNotes")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("ApprovedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<Guid?>("ApprovedBy")
                         .HasColumnType("uuid");
 
@@ -465,12 +571,18 @@ namespace ChurchPortal.Migrations
                     b.Property<string>("ChequeNumber")
                         .HasColumnType("text");
 
+                    b.Property<int>("Classification")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Department")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("FinanceNotes")
                         .HasColumnType("text");
@@ -499,6 +611,12 @@ namespace ChurchPortal.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("OverBudgetAtApproval")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("OverBudgetJustification")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("PaidBy")
                         .HasColumnType("uuid");
 
@@ -508,6 +626,9 @@ namespace ChurchPortal.Migrations
 
                     b.Property<Guid>("PayeeUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PaymentConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("PaymentDate")
                         .HasColumnType("timestamp with time zone");
@@ -525,6 +646,12 @@ namespace ChurchPortal.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<Guid?>("RejectedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RejectedDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("RejectionReason")
                         .HasColumnType("text");
 
@@ -536,6 +663,9 @@ namespace ChurchPortal.Migrations
 
                     b.Property<string>("RequestNumber")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReviewNotes")
                         .HasColumnType("text");
 
                     b.Property<Guid?>("ReviewedBy")
@@ -558,12 +688,26 @@ namespace ChurchPortal.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("PayeeUserId");
 
+                    b.HasIndex("PaymentDate");
+
                     b.HasIndex("RequestNumber")
                         .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("SubmittedDate");
 
                     b.ToTable("ReimbursementRequests");
                 });
@@ -595,7 +739,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("11111111-1111-1111-1111-111111111111"),
-                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6584),
+                            CreatedDate = new DateTime(2026, 10, 28, 1, 34, 44, 871, DateTimeKind.Utc).AddTicks(7889),
                             Description = "Full access to church records, excluding Accounts Payable",
                             IsDeleted = false,
                             Name = "Admin"
@@ -603,7 +747,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("22222222-2222-2222-2222-222222222222"),
-                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6587),
+                            CreatedDate = new DateTime(2026, 10, 28, 1, 34, 44, 871, DateTimeKind.Utc).AddTicks(7892),
                             Description = "Manages Services and Attendance records",
                             IsDeleted = false,
                             Name = "AttendanceOfficer"
@@ -611,7 +755,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("33333333-3333-3333-3333-333333333333"),
-                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6588),
+                            CreatedDate = new DateTime(2026, 10, 28, 1, 34, 44, 871, DateTimeKind.Utc).AddTicks(7894),
                             Description = "Manages FellowshipCenters and FellowshipAttendance records",
                             IsDeleted = false,
                             Name = "FellowshipLeader"
@@ -619,7 +763,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("44444444-4444-4444-4444-444444444444"),
-                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6596),
+                            CreatedDate = new DateTime(2026, 10, 28, 1, 34, 44, 871, DateTimeKind.Utc).AddTicks(7895),
                             Description = "Manages InventoryItem records",
                             IsDeleted = false,
                             Name = "InventoryOfficer"
@@ -627,7 +771,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("55555555-5555-5555-5555-555555555555"),
-                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6597),
+                            CreatedDate = new DateTime(2026, 10, 28, 1, 34, 44, 871, DateTimeKind.Utc).AddTicks(7896),
                             Description = "Read-only access (retired)",
                             IsDeleted = false,
                             Name = "Viewer"
@@ -635,7 +779,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("66666666-6666-6666-6666-666666666666"),
-                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6598),
+                            CreatedDate = new DateTime(2026, 10, 28, 1, 34, 44, 871, DateTimeKind.Utc).AddTicks(7897),
                             Description = "Submits and tracks personal reimbursement requests",
                             IsDeleted = false,
                             Name = "ChurchMember"
@@ -643,24 +787,24 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("77777777-7777-7777-7777-777777777777"),
-                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6599),
-                            Description = "Reconciles reimbursement requests and processes payments",
+                            CreatedDate = new DateTime(2026, 10, 28, 1, 34, 44, 871, DateTimeKind.Utc).AddTicks(7898),
+                            Description = "Reviews reimbursement requests and forwards them for final approval",
                             IsDeleted = false,
                             Name = "AccountsOfficer"
                         },
                         new
                         {
                             Id = new Guid("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6600),
-                            Description = "Full access to all church records and Accounts Payable, including approvals",
+                            CreatedDate = new DateTime(2026, 10, 28, 1, 34, 44, 871, DateTimeKind.Utc).AddTicks(7903),
+                            Description = "Full access to all church records and Accounts Payable, including final approval and payment confirmation",
                             IsDeleted = false,
                             Name = "AccountsAdmin"
                         },
                         new
                         {
                             Id = new Guid("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
-                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 9, 953, DateTimeKind.Utc).AddTicks(6601),
-                            Description = "Approves reimbursements as Minister in charge and oversees all records",
+                            CreatedDate = new DateTime(2026, 10, 28, 1, 34, 44, 871, DateTimeKind.Utc).AddTicks(7904),
+                            Description = "Retired. Pastors are now name records used on services, not a login role.",
                             IsDeleted = false,
                             Name = "Pastor"
                         });
@@ -685,6 +829,9 @@ namespace ChurchPortal.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("PastorId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Preacher")
                         .HasColumnType("text");
 
@@ -698,6 +845,8 @@ namespace ChurchPortal.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PastorId");
 
                     b.ToTable("Services");
                 });
@@ -736,6 +885,9 @@ namespace ChurchPortal.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsSelfRegistered")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Password")
                         .IsRequired()
                         .HasColumnType("text");
@@ -754,11 +906,12 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("99999999-9999-9999-9999-999999999999"),
-                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 10, 118, DateTimeKind.Utc).AddTicks(6449),
+                            CreatedDate = new DateTime(2026, 10, 28, 1, 34, 45, 61, DateTimeKind.Utc).AddTicks(4826),
                             Email = "admin@churchportal.local",
                             EmailVerified = false,
                             IsDeleted = false,
-                            Password = "$2a$11$DAHWuYQsHuWSJYmzcTBOnuBcgJW9iTBbmwl1XGUgfca/T9dr9mcwe"
+                            IsSelfRegistered = false,
+                            Password = "$2a$11$omLcjPUFEEzivULTBob8jO.cns.heltGZulyV9RPGNue45obTVa6m"
                         });
                 });
 
@@ -834,7 +987,7 @@ namespace ChurchPortal.Migrations
                         new
                         {
                             Id = new Guid("88888888-8888-8888-8888-888888888888"),
-                            CreatedDate = new DateTime(2026, 10, 23, 5, 22, 10, 118, DateTimeKind.Utc).AddTicks(6654),
+                            CreatedDate = new DateTime(2026, 10, 28, 1, 34, 45, 61, DateTimeKind.Utc).AddTicks(4904),
                             IsDeleted = false,
                             RoleId = new Guid("11111111-1111-1111-1111-111111111111"),
                             UserId = new Guid("99999999-9999-9999-9999-999999999999")
@@ -896,6 +1049,26 @@ namespace ChurchPortal.Migrations
                     b.Navigation("ReimbursementRequest");
                 });
 
+            modelBuilder.Entity("ChurchPortal.Core.Entities.ReimbursementRequest", b =>
+                {
+                    b.HasOne("ChurchPortal.Core.Entities.Department", "DepartmentRecord")
+                        .WithMany("Reimbursements")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("DepartmentRecord");
+                });
+
+            modelBuilder.Entity("ChurchPortal.Core.Entities.Service", b =>
+                {
+                    b.HasOne("ChurchPortal.Core.Entities.Pastor", "Pastor")
+                        .WithMany("Services")
+                        .HasForeignKey("PastorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Pastor");
+                });
+
             modelBuilder.Entity("ChurchPortal.Core.Entities.UserCredential", b =>
                 {
                     b.HasOne("ChurchPortal.Core.Entities.User", "User")
@@ -926,9 +1099,19 @@ namespace ChurchPortal.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ChurchPortal.Core.Entities.Department", b =>
+                {
+                    b.Navigation("Reimbursements");
+                });
+
             modelBuilder.Entity("ChurchPortal.Core.Entities.FellowshipCenter", b =>
                 {
                     b.Navigation("FellowshipAttendances");
+                });
+
+            modelBuilder.Entity("ChurchPortal.Core.Entities.Pastor", b =>
+                {
+                    b.Navigation("Services");
                 });
 
             modelBuilder.Entity("ChurchPortal.Core.Entities.ReimbursementRequest", b =>
