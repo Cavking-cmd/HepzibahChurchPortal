@@ -20,5 +20,6 @@ namespace ChurchPortal.Services.Interfaces
         Task<BaseResponse<VerificationEmailSentDto>> ResendVerificationAsync(Guid userId, ResendVerificationRequest? request);
         BaseResponse<EmailStatusDto> GetEmailStatus();
         Task<BaseResponse<VerificationEmailSentDto>> SendTestEmailAsync(Guid userId);
+        Task<BaseResponse<UserDto>> UpdateRolesAsync(Guid userId, UpdateUserRolesRequest request, Guid actorId);
     }
 }

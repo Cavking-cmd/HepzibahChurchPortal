@@ -3,7 +3,9 @@ namespace ChurchPortal.Core.Entities
     public class ReimbursementRequest : BaseEntity
     {
         public required string RequestNumber { get; set; }
+        /// <summary>The member who submitted the request and is owed the money.</summary>
         public Guid PayeeUserId { get; set; }
+        public User? PayeeUser { get; set; }
         public required string PayeeName { get; set; }
 
         /// <summary>
@@ -46,6 +48,13 @@ namespace ChurchPortal.Core.Entities
         public string? ApprovalNotes { get; set; }
         public bool OverBudgetAtApproval { get; set; }
         public string? OverBudgetJustification { get; set; }
+
+        /// <summary>
+        /// True when an Accounts Admin approved while physical items were still unverified
+        /// or rejected by the Inventory Officer. The reason is required and kept here.
+        /// </summary>
+        public bool InventoryOverride { get; set; }
+        public string? InventoryOverrideReason { get; set; }
 
         // Payment confirmation (Accounts Admin).
         public Guid? PaidBy { get; set; }

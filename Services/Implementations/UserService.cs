@@ -321,6 +321,114 @@ namespace ChurchPortal.Services.Implementations
             }
         }
 
+        public async Task<BaseResponse<UserDto>> UpdateRolesAsync(Guid userId, UpdateUserRolesRequest request, Guid actorId)
+        {
+            try
+            {
+                var wanted = (request?.Roles ?? [])
+                    .Where(r => !string.IsNullOrWhiteSpace(r))
+                    .Select(r => r.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                if (wanted.Count == 0)
+                {
+                    return new BaseResponse<UserDto> { Message = "Choose at least one role.", Status = false };
+                }
+
+                var retired = wanted.FirstOrDefault(r => RetiredRoles.Contains(r));
+                if (retired != null)
+                {
+                    return new BaseResponse<UserDto> { Message = $"The {retired} role has been retired and cannot be assigned.", Status = false };
+                }
+
+                var roles = new List<Role>();
+                foreach (var name in wanted)
+                {
+                    var role = await _roleRepository.GetRoleByNameAsync(name);
+                    if (role == null || role.IsDeleted)
+                    {
+                        return new BaseResponse<UserDto> { Message = $"Role '{name}' does not exist.", Status = false };
+                    }
+                    roles.Add(role);
+                }
+
+                var user = await _userRepository.GetByIdAsync(userId);
+                if (user == null)
+                {
+                    return new BaseResponse<UserDto> { Message = "User not found.", Status = false };
+                }
+
+                var current = user.UserRoles.Where(ur => !ur.IsDeleted && ur.Role != null).ToList();
+                var wantedIds = roles.Select(r => r.Id).ToHashSet();
+
+                // Stop an administrator from removing their own admin access by accident.
+                if (userId == actorId)
+                {
+                    var adminRoles = new[] { "Admin", "AccountsAdmin" };
+                    var losing = current.Where(ur => adminRoles.Contains(ur.Role!.Name) && !wantedIds.Contains(ur.RoleId)).Select(ur => ur.Role!.Name).ToList();
+                    if (losing.Count > 0)
+                    {
+                        return new BaseResponse<UserDto>
+                        {
+                            Message = $"You can't remove your own {string.Join(" and ", losing)} role. Ask another administrator to do it.",
+                            Status = false
+                        };
+                    }
+                }
+
+                var before = current.Select(ur => ur.Role!.Name).OrderBy(n => n).ToList();
+
+                foreach (var link in current.Where(ur => !wantedIds.Contains(ur.RoleId)))
+                {
+                    link.IsDeleted = true;
+                }
+
+                foreach (var role in roles)
+                {
+                    if (current.Any(ur => ur.RoleId == role.Id))
+                    {
+                        continue;
+                    }
+
+                    // Reuse a previously removed link instead of adding a duplicate row.
+                    var old = user.UserRoles.FirstOrDefault(ur => ur.RoleId == role.Id && ur.IsDeleted);
+                    if (old != null)
+                    {
+                        old.IsDeleted = false;
+                    }
+                    else
+                    {
+                        await _userRoleRepository.CreateAsync(new UserRole { UserId = user.Id, RoleId = role.Id });
+                    }
+                }
+
+                var after = roles.Select(r => r.Name).OrderBy(n => n).ToList();
+                await _auditLogRepository.CreateAsync(new AuditLog
+                {
+                    EntityName = nameof(User),
+                    EntityId = user.Id,
+                    Action = "UpdateRoles",
+                    UserId = actorId,
+                    Details = $"Roles changed from [{string.Join(", ", before)}] to [{string.Join(", ", after)}]."
+                });
+                await _unitOfWork.SaveChangesAsync();
+
+                var updated = await _userRepository.GetByIdAsync(userId);
+                return new BaseResponse<UserDto>
+                {
+                    Message = $"Roles updated for {user.Email}. They need to sign out and sign back in for the change to take effect.",
+                    Status = true,
+                    Data = updated == null ? null : ToDto(updated)
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update roles for {UserId}.", userId);
+                return new BaseResponse<UserDto> { Message = "Something went wrong while updating the roles. Please try again.", Status = false };
+            }
+        }
+
         public async Task<BaseResponse<List<UserDto>>> GetAllAsync()
         {
             try

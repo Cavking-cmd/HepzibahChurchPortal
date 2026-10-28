@@ -43,6 +43,12 @@ namespace ChurchPortal.DataContext
                 entity.HasIndex(r => r.SubmittedDate);
                 entity.Property(r => r.ApprovedAmount).HasPrecision(18, 2);
                 entity.Property(r => r.Version).IsRowVersion();
+                // Every request belongs to the user who submitted it. Users are soft-deleted,
+                // so Restrict only stops a hard delete of someone who still has requests.
+                entity.HasOne(r => r.PayeeUser)
+                    .WithMany(u => u.Reimbursements)
+                    .HasForeignKey(r => r.PayeeUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(r => r.DepartmentRecord)
                     .WithMany(d => d.Reimbursements)
                     .HasForeignKey(r => r.DepartmentId)
@@ -60,6 +66,12 @@ namespace ChurchPortal.DataContext
 
             modelBuilder.Entity<ReimbursementItem>(entity =>
             {
+                entity.HasIndex(i => i.VerificationStatus);
+                // Inventory rows are soft-deleted, so this only matters for a hard delete.
+                entity.HasOne(i => i.InventoryItem)
+                    .WithMany()
+                    .HasForeignKey(i => i.InventoryItemId)
+                    .OnDelete(DeleteBehavior.SetNull);
                 entity.Property(i => i.Subtotal).HasPrecision(18, 2);
                 entity.Property(i => i.Gst).HasPrecision(18, 2);
                 entity.Property(i => i.Pst).HasPrecision(18, 2);

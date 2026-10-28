@@ -12,6 +12,12 @@ namespace ChurchPortal.Repositories.Interfaces
         /// <summary>Untracked, with items and history but without receipt files. For lists.</summary>
         Task<List<ReimbursementRequest>> GetAllWithDetailsAsync(Expression<Func<ReimbursementRequest, bool>> predicate);
 
+        /// <summary>Untracked requests with physical items. pendingOnly = only those still waiting for the Inventory Officer.</summary>
+        Task<List<ReimbursementRequest>> GetWithPhysicalItemsAsync(bool pendingOnly);
+
+        /// <summary>Tracked request that owns the given line item.</summary>
+        Task<ReimbursementRequest?> GetByItemIdAsync(Guid itemId);
+
         Task<ReimbursementReceipt?> GetReceiptAsync(Guid receiptId);
         Task<Dictionary<Guid, int>> GetReceiptCountsAsync(IReadOnlyCollection<Guid> requestIds);
 

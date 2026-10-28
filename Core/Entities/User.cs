@@ -19,5 +19,8 @@ namespace ChurchPortal.Core.Entities
 
         public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
         public ICollection<UserCredential> Credentials { get; set; } = new List<UserCredential>();
+
+        /// <summary>Reimbursement requests this user submitted (ReimbursementRequest.PayeeUserId).</summary>
+        public ICollection<ReimbursementRequest> Reimbursements { get; set; } = new List<ReimbursementRequest>();
     }
 }

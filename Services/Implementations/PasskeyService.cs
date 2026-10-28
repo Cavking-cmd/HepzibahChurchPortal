@@ -17,6 +17,7 @@ namespace ChurchPortal.Services.Implementations
         private readonly IUserRepository _userRepository;
         private readonly IUserCredentialRepository _credentialRepository;
         private readonly IAuthService _authService;
+        private static readonly HashSet<string> RetiredRoles = new(StringComparer.OrdinalIgnoreCase) { "Pastor", "Viewer" };
         private readonly IMemoryCache _cache;
         private readonly IUnitOfWork _unitOfWork;
 
@@ -180,8 +181,21 @@ namespace ChurchPortal.Services.Implementations
                     AvatarBase64 = user.AvatarFile != null && user.AvatarFile.Length > 0
                         ? $"data:{user.AvatarMimeType};base64,{Convert.ToBase64String(user.AvatarFile)}"
                         : null,
-                    UserRoles = user.UserRoles.Select(ur => ur.Role!.Name).ToList()
+                    // Same rule as password sign-in: removed and retired roles don't go into the token.
+                    UserRoles = user.UserRoles
+                        .Where(ur => !ur.IsDeleted && ur.Role != null && !ur.Role.IsDeleted && !RetiredRoles.Contains(ur.Role.Name))
+                        .Select(ur => ur.Role!.Name)
+                        .ToList()
                 };
+                if (userDto.UserRoles.Count == 0)
+                {
+                    return new BaseResponse<object>
+                    {
+                        Message = "Your account does not have an active role. Ask an administrator to assign one.",
+                        Status = false,
+                        Data = null
+                    };
+                }
                 var token = _authService.GenerateToken(userDto);
 
                 return new BaseResponse<object>

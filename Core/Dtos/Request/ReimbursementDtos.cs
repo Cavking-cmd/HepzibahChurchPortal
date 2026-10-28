@@ -10,7 +10,9 @@ namespace ChurchPortal.Core.Dtos.Request
         public decimal Gst { get; set; }
         public decimal Pst { get; set; }
         public decimal Hst { get; set; }
+        /// <summary>Optional. Only for items that already have a serial number.</summary>
         public string? SerialNumber { get; set; }
+        public ReimbursementItemType ItemType { get; set; } = ReimbursementItemType.Service;
     }
 
     public class ReimbursementReceiptUploadModel
@@ -57,6 +59,12 @@ namespace ChurchPortal.Core.Dtos.Request
         /// <summary>Required when the server finds the request would exceed a budget.</summary>
         public string? OverBudgetJustification { get; set; }
 
+        /// <summary>
+        /// Required when physical items are still waiting for the Inventory Officer or were
+        /// rejected by them. Only an Accounts Admin can approve in that case.
+        /// </summary>
+        public string? InventoryOverrideReason { get; set; }
+
         public string? PreparedBy { get; set; }
         public string? ChequeNumber { get; set; }
         public string? AuthorizedByName1 { get; set; }
@@ -101,6 +109,12 @@ namespace ChurchPortal.Core.Dtos.Request
         public bool RequiresSerialNumber { get; set; }
         public string? SerialNumber { get; set; }
         public string? ScreeningNote { get; set; }
+        public ReimbursementItemType ItemType { get; set; }
+        public InventoryVerificationStatus VerificationStatus { get; set; }
+        public string? VerifiedByName { get; set; }
+        public DateTime? VerifiedDate { get; set; }
+        public string? VerificationNotes { get; set; }
+        public Guid? InventoryItemId { get; set; }
     }
 
     public class ReimbursementReceiptDto
@@ -165,6 +179,13 @@ namespace ChurchPortal.Core.Dtos.Request
         public string? ApprovalNotes { get; set; }
         public bool OverBudgetAtApproval { get; set; }
         public string? OverBudgetJustification { get; set; }
+        public bool InventoryOverride { get; set; }
+        public string? InventoryOverrideReason { get; set; }
+
+        /// <summary>Physical items still waiting for the Inventory Officer.</summary>
+        public int PendingVerificationCount { get; set; }
+        /// <summary>Physical items the Inventory Officer rejected.</summary>
+        public int RejectedVerificationCount { get; set; }
 
         public DateTime? PaymentDate { get; set; }
         public DateTime? PaymentConfirmedAt { get; set; }
@@ -187,6 +208,50 @@ namespace ChurchPortal.Core.Dtos.Request
         public List<ReimbursementItemDto> Items { get; set; } = [];
         public List<ReimbursementReceiptDto> Receipts { get; set; } = [];
         public List<ReimbursementHistoryDto> History { get; set; } = [];
+    }
+
+    /// <summary>Inventory Officer confirms a physical item and fills in its inventory record.</summary>
+    public class VerifyReimbursementItemModel
+    {
+        public required string ItemName { get; set; }
+        public required string Category { get; set; }
+        public int Quantity { get; set; } = 1;
+        public required string Location { get; set; }
+        public ItemCondition Condition { get; set; } = ItemCondition.Good;
+        public DateTime PurchaseDate { get; set; }
+        public decimal Value { get; set; }
+        public string? SerialNumber { get; set; }
+        public required string Description { get; set; }
+        public required string Custodian { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    public class RejectReimbursementItemModel
+    {
+        public required string Reason { get; set; }
+    }
+
+    /// <summary>One physical line item as the Inventory Officer sees it.</summary>
+    public class InventoryVerificationItemDto
+    {
+        public Guid ItemId { get; set; }
+        public Guid ReimbursementRequestId { get; set; }
+        public required string RequestNumber { get; set; }
+        public ReimbursementStatus RequestStatus { get; set; }
+        public required string PayeeName { get; set; }
+        public required string Department { get; set; }
+        public DateTime RequestDate { get; set; }
+        public DateTime? SubmittedDate { get; set; }
+        public int ReferenceNumber { get; set; }
+        public required string ItemName { get; set; }
+        public string? SerialNumber { get; set; }
+        public decimal Total { get; set; }
+        public InventoryVerificationStatus VerificationStatus { get; set; }
+        public string? VerifiedByName { get; set; }
+        public DateTime? VerifiedDate { get; set; }
+        public string? VerificationNotes { get; set; }
+        public Guid? InventoryItemId { get; set; }
+        public List<ReimbursementReceiptDto> Receipts { get; set; } = [];
     }
 
     public class NotificationDto

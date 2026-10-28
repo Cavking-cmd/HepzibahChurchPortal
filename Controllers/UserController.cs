@@ -103,6 +103,16 @@ namespace ChurchPortal.Controllers
             return NotFound(new { Message = "User not found." });
         }
 
+        /// <summary>Changes an existing user's roles (for a promotion or change of duty).</summary>
+        [Authorize(Roles = "AccountsAdmin,Admin")]
+        [HttpPut("{id}/roles")]
+        public async Task<IActionResult> UpdateRoles(Guid id, [FromBody] UpdateUserRolesRequest model)
+        {
+            var result = await _userService.UpdateRolesAsync(id, model, CurrentUserId);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
         [Authorize]
         [HttpGet("me")]
         public async Task<IActionResult> Me()

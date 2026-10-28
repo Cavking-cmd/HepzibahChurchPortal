@@ -29,6 +29,12 @@ namespace ChurchPortal.Core.Dtos.UserDtos
         public required List<string> Roles { get; set; }
     }
 
+    /// <summary>Replaces a user's roles, e.g. after a promotion. The full new list is sent.</summary>
+    public class UpdateUserRolesRequest
+    {
+        public List<string> Roles { get; set; } = [];
+    }
+
     /// <summary>Public sign-up. There is deliberately no role field: new accounts are always ChurchMember.</summary>
     public class SignUpRequestModel
     {

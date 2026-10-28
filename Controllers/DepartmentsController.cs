@@ -23,7 +23,7 @@ namespace ChurchPortal.Controllers
 
         /// <summary>Active departments for the reimbursement form. Names only, no budget figures.</summary>
         [HttpGet("options")]
-        [Authorize(Roles = "ChurchMember,AccountsOfficer,AccountsAdmin")]
+        [Authorize(Roles = "ChurchMember,AccountsOfficer,AccountsAdmin,Admin,FellowshipLeader,InventoryOfficer")]
         public async Task<IActionResult> Options()
         {
             var result = await _departmentService.GetActiveOptionsAsync();

@@ -14,14 +14,19 @@ namespace ChurchPortal.Services.Implementations
     /// payment sent by the browser is trusted.
     ///
     ///   Draft / Returned for correction --member submits--> Under Review
-    ///   Under Review     --Accounts Officer forwards--> Pending Approval
-    ///   Under Review     --Accounts Officer returns---> Returned for correction
-    ///   Under Review     --Accounts Officer rejects---> Rejected
+    ///   Under Review     --Accounts Officer forwards--> Pending Approval (optional help step)
+    ///   Under Review     --Accounts Admin approves-----> Approved   (directly, no forward needed)
+    ///   Under Review     --Officer or Admin returns----> Returned for correction
+    ///   Under Review     --Officer or Admin rejects----> Rejected
     ///   Pending Approval --Accounts Admin approves----> Approved   (not paid)
     ///   Pending Approval --Accounts Admin returns-----> Returned for correction
     ///   Pending Approval --Accounts Admin rejects-----> Rejected
     ///   Approved         --Accounts Admin confirms payment--> Paid
     ///   Rejected and Paid are final.
+    ///
+    /// Physical line items are checked by the Inventory Officer after submission. While
+    /// any are waiting or were rejected, the Accounts Officer cannot forward the request;
+    /// an Accounts Admin can still approve it with a written override reason.
     ///
     /// Nobody can act on their own request, and the person who reviewed a request
     /// cannot also give its final approval.
@@ -31,6 +36,7 @@ namespace ChurchPortal.Services.Implementations
         public const string ChurchMemberRole = "ChurchMember";
         public const string AccountsOfficerRole = "AccountsOfficer";
         public const string AccountsAdminRole = "AccountsAdmin";
+        public const string InventoryOfficerRole = "InventoryOfficer";
         public const string PersonalUseLabel = "Personal Use";
 
         private const int MaxItems = 10;
@@ -49,6 +55,7 @@ namespace ChurchPortal.Services.Implementations
         private readonly IReimbursementRepository _reimbursementRepository;
         private readonly IUserRepository _userRepository;
         private readonly IDepartmentRepository _departmentRepository;
+        private readonly IInventoryItemRepository _inventoryItemRepository;
         private readonly INotificationRepository _notificationRepository;
         private readonly IAuditLogRepository _auditLogRepository;
         private readonly IBudgetService _budgetService;
@@ -63,6 +70,7 @@ namespace ChurchPortal.Services.Implementations
             IReimbursementRepository reimbursementRepository,
             IUserRepository userRepository,
             IDepartmentRepository departmentRepository,
+            IInventoryItemRepository inventoryItemRepository,
             INotificationRepository notificationRepository,
             IAuditLogRepository auditLogRepository,
             IBudgetService budgetService,
@@ -73,6 +81,7 @@ namespace ChurchPortal.Services.Implementations
             _reimbursementRepository = reimbursementRepository;
             _userRepository = userRepository;
             _departmentRepository = departmentRepository;
+            _inventoryItemRepository = inventoryItemRepository;
             _notificationRepository = notificationRepository;
             _auditLogRepository = auditLogRepository;
             _budgetService = budgetService;
@@ -192,9 +201,31 @@ namespace ChurchPortal.Services.Implementations
                 request.RequestDate = Validator.AsUtc(model.RequestDate);
                 request.Remarks = model.Remarks?.Trim();
 
+                // Items are rebuilt on every edit. A physical item the Inventory Officer already
+                // verified keeps that result (and its inventory record) if it is unchanged, so
+                // editing the request does not create a duplicate inventory entry.
+                var previous = request.Items.ToList();
                 request.Items.Clear();
                 foreach (var item in items)
                 {
+                    var match = previous.FirstOrDefault(p =>
+                        p.ItemType == ReimbursementItemType.Physical &&
+                        item.ItemType == ReimbursementItemType.Physical &&
+                        p.VerificationStatus == InventoryVerificationStatus.Verified &&
+                        string.Equals(p.ItemName, item.ItemName, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(p.SerialNumber ?? string.Empty, item.SerialNumber ?? string.Empty, StringComparison.OrdinalIgnoreCase) &&
+                        p.Total == item.Total);
+                    if (match != null)
+                    {
+                        previous.Remove(match);
+                        item.VerificationStatus = match.VerificationStatus;
+                        item.VerifiedBy = match.VerifiedBy;
+                        item.VerifiedByName = match.VerifiedByName;
+                        item.VerifiedDate = match.VerifiedDate;
+                        item.VerificationNotes = match.VerificationNotes;
+                        item.InventoryItemId = match.InventoryItemId;
+                    }
+
                     item.ReimbursementRequestId = request.Id;
                     request.Items.Add(item);
                 }
@@ -286,10 +317,18 @@ namespace ChurchPortal.Services.Implementations
                     return Fail<ReimbursementRequestDto>("Attach at least one invoice or receipt before submitting. A reimbursement is void without a receipt.");
                 }
 
-                var missingSerial = request.Items.FirstOrDefault(i => i.RequiresSerialNumber && string.IsNullOrWhiteSpace(i.SerialNumber));
-                if (missingSerial != null)
+                // Physical items go to the Inventory Officer. Anything not already verified
+                // (new, or rejected before the request was returned) is checked again.
+                var toVerify = request.Items
+                    .Where(i => !i.IsDeleted && i.ItemType == ReimbursementItemType.Physical && i.VerificationStatus != InventoryVerificationStatus.Verified)
+                    .ToList();
+                foreach (var item in toVerify)
                 {
-                    return Fail<ReimbursementRequestDto>($"Serial number is required for \"{missingSerial.ItemName}\" before this request can be submitted.");
+                    item.VerificationStatus = InventoryVerificationStatus.Pending;
+                    item.VerifiedBy = null;
+                    item.VerifiedByName = null;
+                    item.VerifiedDate = null;
+                    item.VerificationNotes = null;
                 }
 
                 var fromStatus = request.Status;
@@ -314,6 +353,20 @@ namespace ChurchPortal.Services.Implementations
                     $"{request.PayeeName} {(resubmission ? "resubmitted" : "submitted")} {FormatMoney(request.TotalAmount)} ({request.Department}).",
                     request.Id);
 
+                if (toVerify.Count > 0)
+                {
+                    var inventoryOfficers = await _userRepository.GetUsersByRoleAsync(InventoryOfficerRole);
+                    var names = string.Join(", ", toVerify.Select(i => $"\"{i.ItemName}\""));
+                    await QueueNotifyAsync(
+                        inventoryOfficers,
+                        userId,
+                        $"Item{(toVerify.Count == 1 ? "" : "s")} to confirm on {request.RequestNumber}",
+                        $"{request.PayeeName} submitted a reimbursement with {toVerify.Count} physical item{(toVerify.Count == 1 ? "" : "s")} " +
+                        $"({names}) that need{(toVerify.Count == 1 ? "s" : "")} to be confirmed and verified. " +
+                        "Open Items to Verify on your Inventory dashboard to verify or reject them.",
+                        request.Id);
+                }
+
                 await _auditLogRepository.CreateAsync(NewAudit(request.Id, resubmission ? "Resubmit" : "Submit", userId));
 
                 var saveError = await TrySaveAsync();
@@ -323,7 +376,11 @@ namespace ChurchPortal.Services.Implementations
                 }
 
                 await FlushEmailsAsync();
-                return await BuildResponseAsync(request, "Submitted. Your request is now under review by an Accounts Officer.");
+                return await BuildResponseAsync(
+                    request,
+                    toVerify.Count > 0
+                        ? "Submitted. Your request is under review, and the Inventory Officer has been asked to verify your physical items."
+                        : "Submitted. Your request is now under review.");
             }
             catch (Exception ex)
             {
@@ -403,6 +460,13 @@ namespace ChurchPortal.Services.Implementations
                     return Fail<ReimbursementRequestDto>(
                         $"This older request still has the typed department \"{request.Department}\". " +
                         "Ask an Accounts Admin to link it to a department, or return it to the member.");
+                }
+
+                var inventoryBlock = InventoryBlockMessage(request);
+                if (inventoryBlock != null)
+                {
+                    return Fail<ReimbursementRequestDto>(
+                        inventoryBlock + " You can return or reject the request; only an Accounts Admin can approve it with an override.");
                 }
 
                 var budget = await _budgetService.GetRequestBudgetAsync(request);
@@ -571,15 +635,33 @@ namespace ChurchPortal.Services.Implementations
                     return Fail<ReimbursementRequestDto>("You cannot approve your own reimbursement.");
                 }
 
-                if (request.Status != ReimbursementStatus.PendingApproval)
+                // The Accounts Admin can approve straight from Under Review; the officer's
+                // forward is helpful but not required.
+                var fromStatus = request.Status;
+                var direct = IsAwaitingReview(fromStatus);
+                if (!direct && fromStatus != ReimbursementStatus.PendingApproval)
                 {
                     return Fail<ReimbursementRequestDto>(
-                        $"Only requests that have passed accounts review can be approved. This one is {Describe(request.Status)}.");
+                        $"Only requests that are under review or pending approval can be approved. This one is {Describe(request.Status)}.");
                 }
 
-                if (request.ReviewedBy == userId)
+                if (!direct && request.ReviewedBy == userId)
                 {
                     return Fail<ReimbursementRequestDto>("The person who reviewed a request cannot also give its final approval.");
+                }
+
+                if (request.Classification == ReimbursementClassification.Department && request.DepartmentId == null)
+                {
+                    return Fail<ReimbursementRequestDto>(
+                        $"This older request still has the typed department \"{request.Department}\". Link it to a department first (Departments → Needs linking).");
+                }
+
+                // Physical items not confirmed by the Inventory Officer need a written override.
+                var inventoryBlock = InventoryBlockMessage(request);
+                var overrideReason = model.InventoryOverrideReason?.Trim();
+                if (inventoryBlock != null && string.IsNullOrWhiteSpace(overrideReason))
+                {
+                    return Fail<ReimbursementRequestDto>(inventoryBlock + " To approve anyway, enter an inventory override reason.");
                 }
 
                 var approvedAmount = model.ApprovedAmount ?? request.TotalAmount;
@@ -617,6 +699,8 @@ namespace ChurchPortal.Services.Implementations
                 request.ApprovalNotes = notes;
                 request.OverBudgetAtApproval = budget.RequiresOverBudgetJustification;
                 request.OverBudgetJustification = budget.RequiresOverBudgetJustification ? justification : null;
+                request.InventoryOverride = inventoryBlock != null;
+                request.InventoryOverrideReason = inventoryBlock != null ? overrideReason : null;
                 request.PreparedBy = model.PreparedBy?.Trim() ?? request.PreparedBy;
                 request.ChequeNumber = model.ChequeNumber?.Trim() ?? request.ChequeNumber;
                 request.AuthorizedByName1 = model.AuthorizedByName1?.Trim() ?? request.AuthorizedByName1;
@@ -625,12 +709,22 @@ namespace ChurchPortal.Services.Implementations
 
                 var historyNote = string.IsNullOrWhiteSpace(notes) ? "Final approval given." : notes;
                 historyNote += $" Approved amount {FormatMoney(approvedAmount)}.";
+                if (direct)
+                {
+                    historyNote += " Approved directly from Under Review.";
+                }
+
                 if (budget.RequiresOverBudgetJustification)
                 {
                     historyNote += $" Approved over budget. Justification: {justification}";
                 }
 
-                await AddHistoryAsync(request, userId, "Approved", ReimbursementStatus.PendingApproval, ReimbursementStatus.Approved, historyNote);
+                if (inventoryBlock != null)
+                {
+                    historyNote += $" Inventory override ({inventoryBlock}) Reason: {overrideReason}";
+                }
+
+                await AddHistoryAsync(request, userId, "Approved", fromStatus, ReimbursementStatus.Approved, historyNote);
                 await QueueNotifyPayeeAsync(
                     request,
                     userId,
@@ -641,8 +735,12 @@ namespace ChurchPortal.Services.Implementations
                     userId,
                     $"Reimbursement {request.RequestNumber} approved",
                     $"{request.PayeeName}'s request was approved for {FormatMoney(approvedAmount)} and is awaiting payment.");
+                var auditDetails = new List<string>();
+                if (direct) auditDetails.Add("Approved directly from Under Review.");
+                if (budget.RequiresOverBudgetJustification) auditDetails.Add($"Over budget. Justification: {justification}");
+                if (inventoryBlock != null) auditDetails.Add($"Inventory override. Reason: {overrideReason}");
                 await _auditLogRepository.CreateAsync(NewAudit(request.Id, "Approve", userId,
-                    budget.RequiresOverBudgetJustification ? $"Over budget. Justification: {justification}" : null));
+                    auditDetails.Count > 0 ? string.Join(" ", auditDetails) : null));
 
                 var saveError = await TrySaveAsync();
                 if (saveError != null)
@@ -773,6 +871,332 @@ namespace ChurchPortal.Services.Implementations
         }
 
         // =====================================================================
+        // Inventory Officer: verify physical items
+        // =====================================================================
+
+        private static bool CanVerifyAt(ReimbursementStatus status) =>
+            status is ReimbursementStatus.UnderReview or ReimbursementStatus.LegacyAccountsReview
+                or ReimbursementStatus.PendingApproval or ReimbursementStatus.Approved or ReimbursementStatus.Paid;
+
+        public async Task<BaseResponse<ICollection<InventoryVerificationItemDto>>> GetVerificationQueueAsync(
+            bool pendingOnly, Guid userId, IReadOnlyCollection<string> roles)
+        {
+            try
+            {
+                if (!roles.Contains(InventoryOfficerRole) && !IsPrivileged(roles))
+                {
+                    return Fail<ICollection<InventoryVerificationItemDto>>("Only the Inventory Officer and Accounts staff can see items to verify.");
+                }
+
+                var requests = await _reimbursementRepository.GetWithPhysicalItemsAsync(pendingOnly);
+                var receipts = await _reimbursementRepository.GetReceiptMetadataAsync(requests.Select(r => r.Id).ToList());
+
+                var data = new List<InventoryVerificationItemDto>();
+                foreach (var request in requests)
+                {
+                    var requestReceipts = (receipts.TryGetValue(request.Id, out var list) ? list : [])
+                        .Where(r => !r.IsDeleted)
+                        .Select(r => new ReimbursementReceiptDto
+                        {
+                            Id = r.Id,
+                            FileName = r.FileName,
+                            ContentType = r.ContentType,
+                            FileSize = r.FileSize,
+                            UploadedBy = r.UploadedBy,
+                            CreatedDate = r.CreatedDate
+                        })
+                        .ToList();
+
+                    var department = request.Classification == ReimbursementClassification.PersonalUse
+                        ? PersonalUseLabel
+                        : request.DepartmentRecord?.Name ?? request.Department;
+
+                    foreach (var item in request.Items
+                        .Where(i => !i.IsDeleted && i.ItemType == ReimbursementItemType.Physical)
+                        .Where(i => pendingOnly ? i.VerificationStatus == InventoryVerificationStatus.Pending : i.VerificationStatus != InventoryVerificationStatus.NotRequired)
+                        .OrderBy(i => i.ReferenceNumber))
+                    {
+                        data.Add(new InventoryVerificationItemDto
+                        {
+                            ItemId = item.Id,
+                            ReimbursementRequestId = request.Id,
+                            RequestNumber = request.RequestNumber,
+                            RequestStatus = request.Status,
+                            PayeeName = request.PayeeName,
+                            Department = department,
+                            RequestDate = request.RequestDate,
+                            SubmittedDate = request.SubmittedDate,
+                            ReferenceNumber = item.ReferenceNumber,
+                            ItemName = item.ItemName,
+                            SerialNumber = item.SerialNumber,
+                            Total = item.Total,
+                            VerificationStatus = item.VerificationStatus,
+                            VerifiedByName = item.VerifiedByName,
+                            VerifiedDate = item.VerifiedDate,
+                            VerificationNotes = item.VerificationNotes,
+                            InventoryItemId = item.InventoryItemId,
+                            Receipts = requestReceipts
+                        });
+                    }
+                }
+
+                return new BaseResponse<ICollection<InventoryVerificationItemDto>> { Message = "Items found.", Status = true, Data = data };
+            }
+            catch (Exception ex)
+            {
+                return Unexpected<ICollection<InventoryVerificationItemDto>>(ex, "load items to verify");
+            }
+        }
+
+        public async Task<BaseResponse<InventoryVerificationItemDto>> VerifyItemAsync(
+            Guid itemId, VerifyReimbursementItemModel model, Guid userId, IReadOnlyCollection<string> roles)
+        {
+            try
+            {
+                if (!roles.Contains(InventoryOfficerRole))
+                {
+                    return Fail<InventoryVerificationItemDto>("Only an Inventory Officer can verify items.");
+                }
+
+                var request = await _reimbursementRepository.GetByItemIdAsync(itemId);
+                var item = request?.Items.FirstOrDefault(i => i.Id == itemId && !i.IsDeleted);
+                if (request == null || item == null)
+                {
+                    return Fail<InventoryVerificationItemDto>("Item not found.");
+                }
+
+                if (request.PayeeUserId == userId)
+                {
+                    return Fail<InventoryVerificationItemDto>("You cannot verify items on your own reimbursement.");
+                }
+
+                if (item.ItemType != ReimbursementItemType.Physical)
+                {
+                    return Fail<InventoryVerificationItemDto>("Only physical items are verified.");
+                }
+
+                if (!CanVerifyAt(request.Status))
+                {
+                    return Fail<InventoryVerificationItemDto>($"This request is {Describe(request.Status)}, so its items can't be verified now.");
+                }
+
+                if (item.VerificationStatus == InventoryVerificationStatus.Verified)
+                {
+                    return Fail<InventoryVerificationItemDto>("This item has already been verified and added to inventory.");
+                }
+
+                if (Validator.CheckString(model.ItemName)) return Fail<InventoryVerificationItemDto>("Item name is required.");
+                if (Validator.CheckString(model.Category)) return Fail<InventoryVerificationItemDto>("Category is required.");
+                if (Validator.CheckString(model.Location)) return Fail<InventoryVerificationItemDto>("Location is required.");
+                if (Validator.CheckString(model.Custodian)) return Fail<InventoryVerificationItemDto>("Custodian is required.");
+                if (Validator.CheckString(model.Description)) return Fail<InventoryVerificationItemDto>("Description is required.");
+                if (model.Quantity < 1) return Fail<InventoryVerificationItemDto>("Quantity must be at least 1.");
+                if (model.Value < 0) return Fail<InventoryVerificationItemDto>("Value cannot be negative.");
+                if (!Enum.IsDefined(model.Condition)) return Fail<InventoryVerificationItemDto>("Choose the item's condition.");
+
+                var now = DateTime.UtcNow;
+                var serial = model.SerialNumber?.Trim();
+                var inventory = new InventoryItem
+                {
+                    ItemName = model.ItemName.Trim(),
+                    Category = model.Category.Trim(),
+                    Quantity = model.Quantity,
+                    Location = model.Location.Trim(),
+                    Condition = model.Condition,
+                    PurchaseDate = model.PurchaseDate == default ? request.RequestDate : Validator.AsUtc(model.PurchaseDate),
+                    Value = Math.Round(model.Value, 2, MidpointRounding.AwayFromZero),
+                    SerialNumber = string.IsNullOrWhiteSpace(serial) ? null : serial,
+                    Description = model.Description.Trim(),
+                    Custodian = model.Custodian.Trim(),
+                    LastVerifiedDate = now
+                };
+                await _inventoryItemRepository.CreateAsync(inventory);
+
+                var names = await _userRepository.GetDisplayNamesAsync([userId]);
+                var officerName = names.TryGetValue(userId, out var n) ? n : "the Inventory Officer";
+                var notes = model.Notes?.Trim();
+
+                item.VerificationStatus = InventoryVerificationStatus.Verified;
+                item.VerifiedBy = userId;
+                item.VerifiedByName = officerName;
+                item.VerifiedDate = now;
+                item.VerificationNotes = string.IsNullOrWhiteSpace(notes) ? null : notes;
+                item.InventoryItemId = inventory.Id;
+                if (string.IsNullOrWhiteSpace(item.SerialNumber) && inventory.SerialNumber != null)
+                {
+                    item.SerialNumber = inventory.SerialNumber;
+                }
+
+                var remaining = request.Items.Count(i => !i.IsDeleted && i.ItemType == ReimbursementItemType.Physical &&
+                    i.VerificationStatus != InventoryVerificationStatus.Verified);
+
+                await AddHistoryAsync(request, userId, "ItemVerified", null, null,
+                    $"Inventory Officer verified \"{item.ItemName}\" and added it to inventory." + (item.VerificationNotes != null ? $" {item.VerificationNotes}" : ""));
+
+                var accounts = (await _userRepository.GetUsersByRoleAsync(AccountsOfficerRole))
+                    .Concat(await _userRepository.GetUsersByRoleAsync(AccountsAdminRole));
+                await QueueNotifyAsync(
+                    accounts,
+                    userId,
+                    $"Item verified on {request.RequestNumber}",
+                    $"{officerName} verified \"{item.ItemName}\" on {request.PayeeName}'s request and added it to inventory. " +
+                    (remaining == 0
+                        ? "All physical items on this request are now verified."
+                        : $"{remaining} physical item{(remaining == 1 ? " is" : "s are")} still not verified."),
+                    request.Id);
+
+                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "VerifyItem", userId, $"Item {item.Id}; inventory {inventory.Id}"));
+                await _auditLogRepository.CreateAsync(new AuditLog
+                {
+                    EntityName = nameof(InventoryItem),
+                    EntityId = inventory.Id,
+                    Action = "Create",
+                    UserId = userId,
+                    Details = $"From reimbursement {request.RequestNumber}"
+                });
+
+                var saveError = await TrySaveAsync();
+                if (saveError != null)
+                {
+                    return Fail<InventoryVerificationItemDto>(saveError);
+                }
+
+                await FlushEmailsAsync();
+                return new BaseResponse<InventoryVerificationItemDto>
+                {
+                    Message = "Verified and added to inventory. The Accounts team has been notified.",
+                    Status = true,
+                    Data = ToVerificationDto(request, item)
+                };
+            }
+            catch (Exception ex)
+            {
+                return Unexpected<InventoryVerificationItemDto>(ex, "verify the item");
+            }
+        }
+
+        public async Task<BaseResponse<InventoryVerificationItemDto>> RejectItemAsync(
+            Guid itemId, RejectReimbursementItemModel model, Guid userId, IReadOnlyCollection<string> roles)
+        {
+            try
+            {
+                if (!roles.Contains(InventoryOfficerRole))
+                {
+                    return Fail<InventoryVerificationItemDto>("Only an Inventory Officer can reject items.");
+                }
+
+                if (Validator.CheckString(model.Reason))
+                {
+                    return Fail<InventoryVerificationItemDto>("Give a reason for rejecting the item.");
+                }
+
+                var request = await _reimbursementRepository.GetByItemIdAsync(itemId);
+                var item = request?.Items.FirstOrDefault(i => i.Id == itemId && !i.IsDeleted);
+                if (request == null || item == null)
+                {
+                    return Fail<InventoryVerificationItemDto>("Item not found.");
+                }
+
+                if (request.PayeeUserId == userId)
+                {
+                    return Fail<InventoryVerificationItemDto>("You cannot reject items on your own reimbursement.");
+                }
+
+                if (item.ItemType != ReimbursementItemType.Physical)
+                {
+                    return Fail<InventoryVerificationItemDto>("Only physical items are verified.");
+                }
+
+                if (!CanVerifyAt(request.Status))
+                {
+                    return Fail<InventoryVerificationItemDto>($"This request is {Describe(request.Status)}, so its items can't be checked now.");
+                }
+
+                if (item.VerificationStatus == InventoryVerificationStatus.Verified)
+                {
+                    return Fail<InventoryVerificationItemDto>("This item was already verified and added to inventory, so it can't be rejected.");
+                }
+
+                if (item.VerificationStatus == InventoryVerificationStatus.Rejected)
+                {
+                    return Fail<InventoryVerificationItemDto>("This item has already been rejected.");
+                }
+
+                var reason = model.Reason.Trim();
+                var names = await _userRepository.GetDisplayNamesAsync([userId]);
+                var officerName = names.TryGetValue(userId, out var n) ? n : "the Inventory Officer";
+
+                item.VerificationStatus = InventoryVerificationStatus.Rejected;
+                item.VerifiedBy = userId;
+                item.VerifiedByName = officerName;
+                item.VerifiedDate = DateTime.UtcNow;
+                item.VerificationNotes = reason;
+
+                await AddHistoryAsync(request, userId, "ItemRejected", null, null,
+                    $"Inventory Officer rejected \"{item.ItemName}\". Reason: {reason}");
+
+                var accounts = (await _userRepository.GetUsersByRoleAsync(AccountsOfficerRole))
+                    .Concat(await _userRepository.GetUsersByRoleAsync(AccountsAdminRole));
+                await QueueNotifyAsync(
+                    accounts,
+                    userId,
+                    $"Item rejected on {request.RequestNumber}",
+                    $"{officerName} could not verify \"{item.ItemName}\" on {request.PayeeName}'s request. Reason: {reason} " +
+                    "The request can't be forwarded until this is resolved; an Accounts Admin can still approve it with an override.",
+                    request.Id);
+                await QueueNotifyPayeeAsync(
+                    request,
+                    userId,
+                    $"An item on {request.RequestNumber} was not verified",
+                    $"The Inventory Officer could not verify \"{item.ItemName}\". Reason: {reason} " +
+                    "The Accounts team will contact you or return the request so you can correct it.");
+
+                await _auditLogRepository.CreateAsync(NewAudit(request.Id, "RejectItem", userId, $"Item {item.Id}. Reason: {reason}"));
+
+                var saveError = await TrySaveAsync();
+                if (saveError != null)
+                {
+                    return Fail<InventoryVerificationItemDto>(saveError);
+                }
+
+                await FlushEmailsAsync();
+                return new BaseResponse<InventoryVerificationItemDto>
+                {
+                    Message = "Item rejected. The Accounts team and the member have been notified.",
+                    Status = true,
+                    Data = ToVerificationDto(request, item)
+                };
+            }
+            catch (Exception ex)
+            {
+                return Unexpected<InventoryVerificationItemDto>(ex, "reject the item");
+            }
+        }
+
+        private static InventoryVerificationItemDto ToVerificationDto(ReimbursementRequest request, ReimbursementItem item) => new()
+        {
+            ItemId = item.Id,
+            ReimbursementRequestId = request.Id,
+            RequestNumber = request.RequestNumber,
+            RequestStatus = request.Status,
+            PayeeName = request.PayeeName,
+            Department = request.Classification == ReimbursementClassification.PersonalUse
+                ? PersonalUseLabel
+                : request.DepartmentRecord?.Name ?? request.Department,
+            RequestDate = request.RequestDate,
+            SubmittedDate = request.SubmittedDate,
+            ReferenceNumber = item.ReferenceNumber,
+            ItemName = item.ItemName,
+            SerialNumber = item.SerialNumber,
+            Total = item.Total,
+            VerificationStatus = item.VerificationStatus,
+            VerifiedByName = item.VerifiedByName,
+            VerifiedDate = item.VerifiedDate,
+            VerificationNotes = item.VerificationNotes,
+            InventoryItemId = item.InventoryItemId
+        };
+
+        // =====================================================================
         // Reading
         // =====================================================================
 
@@ -867,7 +1291,10 @@ namespace ChurchPortal.Services.Implementations
 
                 var ownerId = await _reimbursementRepository.GetAllAsync(r => r.Id == receipt.ReimbursementRequestId && !r.IsDeleted);
                 var request = ownerId.FirstOrDefault();
-                if (request == null || (!IsPrivileged(roles) && request.PayeeUserId != userId))
+                // The Inventory Officer can open receipts of requests that have physical items to check.
+                var inventoryAccess = request != null && roles.Contains(InventoryOfficerRole) &&
+                    await _reimbursementRepository.CheckAsync(r => r.Id == request.Id && r.Items.Any(i => i.ItemType == ReimbursementItemType.Physical));
+                if (request == null || (!IsPrivileged(roles) && request.PayeeUserId != userId && !inventoryAccess))
                 {
                     return Fail<ReceiptFileDto>("Receipt not found.");
                 }
@@ -947,8 +1374,8 @@ namespace ChurchPortal.Services.Implementations
             status is ReimbursementStatus.UnderReview or ReimbursementStatus.LegacyAccountsReview;
 
         /// <summary>
-        /// Return and reject belong to whoever owns the current stage:
-        /// the Accounts Officer while Under Review, the Accounts Admin while Pending Approval.
+        /// Return and reject: the Accounts Officer or Accounts Admin while Under Review,
+        /// the Accounts Admin while Pending Approval.
         /// </summary>
         private static string? CheckStageActor(ReimbursementRequest request, Guid userId, IReadOnlyCollection<string> roles, string verb)
         {
@@ -959,9 +1386,9 @@ namespace ChurchPortal.Services.Implementations
 
             if (IsAwaitingReview(request.Status))
             {
-                return roles.Contains(AccountsOfficerRole)
+                return roles.Contains(AccountsOfficerRole) || roles.Contains(AccountsAdminRole)
                     ? null
-                    : $"While a request is under review, only an Accounts Officer can {verb} it.";
+                    : $"While a request is under review, only an Accounts Officer or Accounts Admin can {verb} it.";
             }
 
             if (request.Status == ReimbursementStatus.PendingApproval)
@@ -972,6 +1399,32 @@ namespace ChurchPortal.Services.Implementations
             }
 
             return $"A request that is {Describe(request.Status)} cannot be {(verb == "return" ? "returned" : "rejected")}.";
+        }
+
+        /// <summary>
+        /// Null when every physical item has been verified. Otherwise a sentence saying what
+        /// is still waiting or was rejected, used to block the officer and to require the
+        /// Accounts Admin's override reason.
+        /// </summary>
+        private static string? InventoryBlockMessage(ReimbursementRequest request)
+        {
+            var physical = request.Items.Where(i => !i.IsDeleted && i.ItemType == ReimbursementItemType.Physical).ToList();
+            var rejected = physical.Where(i => i.VerificationStatus == InventoryVerificationStatus.Rejected).ToList();
+            var pending = physical.Where(i => i.VerificationStatus is InventoryVerificationStatus.Pending or InventoryVerificationStatus.NotRequired).ToList();
+
+            if (rejected.Count > 0)
+            {
+                return "The Inventory Officer rejected " +
+                    string.Join("; ", rejected.Select(i => $"\"{i.ItemName}\"" + (string.IsNullOrWhiteSpace(i.VerificationNotes) ? "" : $" ({i.VerificationNotes})"))) + ".";
+            }
+
+            if (pending.Count > 0)
+            {
+                return $"{pending.Count} physical item{(pending.Count == 1 ? " is" : "s are")} still waiting for the Inventory Officer to verify: " +
+                    string.Join(", ", pending.Select(i => $"\"{i.ItemName}\"")) + ".";
+            }
+
+            return null;
         }
 
         private static bool IsPrivileged(IReadOnlyCollection<string> roles) =>
@@ -1064,9 +1517,17 @@ namespace ChurchPortal.Services.Implementations
                     return $"Item {index + 1} amounts cannot be negative.";
                 }
 
+                if (!Enum.IsDefined(item.ItemType))
+                {
+                    return $"Item {index + 1}: choose whether it is a physical item or a service.";
+                }
+
                 var total = Math.Round(item.Subtotal + item.Gst + item.Pst + item.Hst, 2, MidpointRounding.AwayFromZero);
                 var serial = item.SerialNumber?.Trim();
-                var requiresSerial = SerialNumberScreener.RequiresSerialNumber(item.ItemName);
+                if (serial is { Length: > 100 })
+                {
+                    return $"Item {index + 1}: the serial number is too long.";
+                }
 
                 builtItems.Add(new ReimbursementItem
                 {
@@ -1077,9 +1538,12 @@ namespace ChurchPortal.Services.Implementations
                     Pst = item.Pst,
                     Hst = item.Hst,
                     Total = total,
-                    RequiresSerialNumber = requiresSerial,
+                    // Serial numbers are optional: only for items that already have one.
+                    RequiresSerialNumber = false,
                     SerialNumber = string.IsNullOrWhiteSpace(serial) ? null : serial,
-                    ScreeningNote = requiresSerial ? "Serialised equipment detected; a serial number is required before submission." : null
+                    ScreeningNote = null,
+                    ItemType = item.ItemType,
+                    VerificationStatus = InventoryVerificationStatus.NotRequired
                 });
             }
 
@@ -1369,6 +1833,12 @@ namespace ChurchPortal.Services.Implementations
                 ApprovalNotes = request.ApprovalNotes,
                 OverBudgetAtApproval = request.OverBudgetAtApproval,
                 OverBudgetJustification = request.OverBudgetJustification,
+                InventoryOverride = request.InventoryOverride,
+                InventoryOverrideReason = request.InventoryOverrideReason,
+                PendingVerificationCount = request.Items.Count(i => !i.IsDeleted && i.ItemType == ReimbursementItemType.Physical &&
+                    i.VerificationStatus is InventoryVerificationStatus.Pending or InventoryVerificationStatus.NotRequired),
+                RejectedVerificationCount = request.Items.Count(i => !i.IsDeleted && i.ItemType == ReimbursementItemType.Physical &&
+                    i.VerificationStatus == InventoryVerificationStatus.Rejected),
                 PaymentDate = request.PaymentDate,
                 PaymentConfirmedAt = request.PaymentConfirmedAt,
                 PaidByName = NameOf(request.PaidBy),
@@ -1400,7 +1870,13 @@ namespace ChurchPortal.Services.Implementations
                         Total = i.Total,
                         RequiresSerialNumber = i.RequiresSerialNumber,
                         SerialNumber = i.SerialNumber,
-                        ScreeningNote = i.ScreeningNote
+                        ScreeningNote = i.ScreeningNote,
+                        ItemType = i.ItemType,
+                        VerificationStatus = i.VerificationStatus,
+                        VerifiedByName = i.VerifiedByName,
+                        VerifiedDate = i.VerifiedDate,
+                        VerificationNotes = i.VerificationNotes,
+                        InventoryItemId = i.InventoryItemId
                     })
                     .ToList(),
                 Receipts = receiptList

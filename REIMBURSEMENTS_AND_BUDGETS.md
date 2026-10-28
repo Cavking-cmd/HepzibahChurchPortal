@@ -5,7 +5,7 @@
 | Stage | Status | Who acts | Possible actions |
 |---|---|---|---|
 | Preparing | Draft | Member (owner) | Edit, delete, submit |
-| 1 | Under Review | **Accounts Officer** | Forward → Pending Approval · Return for correction · Reject |
+| 1 | Under Review | **Accounts Officer** or **Accounts Admin** | Officer: forward → Pending Approval (optional help step) · Admin: approve directly → Approved · Either: return for correction, reject |
 | 2 | Pending Approval | **Accounts Admin** | Approve → Approved · Return for correction · Reject |
 | 3 | Approved (not paid) | **Accounts Admin** | Confirm payment → Paid |
 | — | Returned for Correction | Member (owner) | Edit and resubmit → Under Review |
@@ -13,12 +13,23 @@
 
 Rules enforced on the server (not just hidden buttons):
 - Nobody can review, approve, return, reject or pay their **own** request.
-- Only an Accounts Officer can forward a request; only an Accounts Admin can approve or confirm payment.
-- The person who reviewed a request cannot also approve it.
+- Only an Accounts Officer can forward a request; only an Accounts Admin can approve or confirm payment. The Accounts Admin does not have to wait for the officer.
+- The person who forwarded a request cannot also approve it.
 - Approval never marks a request as paid. Payment is a separate step, and can only be done once.
 - Two people acting on the same request at once: the second gets "changed by someone else, refresh".
 - Self-registered members must verify their email before they can submit.
 - Every action is written to the request history and the audit log, with who, when, from/to status and notes.
+
+## Physical items and the Inventory Officer
+
+- Every line item is marked **Physical item** or **Service**. Serial numbers are optional and only for items that already have one.
+- When a request is submitted, its physical items are set to *waiting for verification* and every Inventory Officer is emailed.
+- On the Inventory dashboard (**Items to Verify**) the Inventory Officer either:
+  - **Verifies** the item: confirms it was seen, fills in its inventory details, and it is added to Inventory. The Accounts Officer and Accounts Admin are emailed.
+  - **Rejects** it with a reason. The Accounts Officer, Accounts Admin and the member are emailed.
+- While any physical item is waiting or rejected, the Accounts Officer **cannot forward** the request (they can still return or reject it).
+- The Accounts Admin can still approve, but must enter an **inventory override reason**, saved on the request, in the history and in the audit log.
+- If a returned request is resubmitted, items that were not verified go back to the Inventory Officer. Unchanged verified items keep their result, so no duplicate inventory entry is made.
 
 The Pastor login role is retired. Pastors are now name records used when creating services.
 

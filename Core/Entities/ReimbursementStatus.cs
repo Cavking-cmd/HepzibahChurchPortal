@@ -34,4 +34,28 @@ namespace ChurchPortal.Core.Entities
         Department = 0,
         PersonalUse = 1
     }
+
+    /// <summary>
+    /// What a line item is. Physical items are checked by the Inventory Officer and
+    /// added to inventory; services (labour, rentals, subscriptions, food) are not.
+    /// Service is 0 so rows created before this field existed are never sent for checking.
+    /// </summary>
+    public enum ReimbursementItemType
+    {
+        Service = 0,
+        Physical = 1
+    }
+
+    /// <summary>Inventory Officer's check of a physical line item.</summary>
+    public enum InventoryVerificationStatus
+    {
+        /// <summary>Service item, or a draft that has not been submitted yet.</summary>
+        NotRequired = 0,
+        /// <summary>Submitted; waiting for the Inventory Officer.</summary>
+        Pending = 1,
+        /// <summary>Seen and confirmed; an inventory record was created.</summary>
+        Verified = 2,
+        /// <summary>Inventory Officer could not confirm it. Blocks the Accounts Officer.</summary>
+        Rejected = 3
+    }
 }

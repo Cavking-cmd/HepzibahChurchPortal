@@ -7,12 +7,18 @@ using Microsoft.AspNetCore.Mvc;
 namespace ChurchPortal.Controllers
 {
     /// <summary>
-    /// Role gates here are the first check; the service checks roles, ownership and
-    /// the current status again before changing anything.
+    /// The class-level gate decides who can use reimbursements at all. Which stage
+    /// action a person may take (forward, approve, pay, return, reject) is decided in
+    /// ReimbursementService from the roles in their token, together with ownership and
+    /// the current status. Doing it there means a refusal comes back as a 400 with a
+    /// plain reason ("Only an Accounts Admin can confirm payment.") instead of a bare 403.
     /// </summary>
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize(Roles = "ChurchMember,AccountsOfficer,AccountsAdmin")]
+    // Every role except AttendanceOfficer can submit and track their own requests.
+    // The Inventory Officer also uses this controller to verify physical items.
+    // Seeing other people's requests and acting on them is limited to Accounts staff in the service.
+    [Authorize(Roles = "ChurchMember,AccountsOfficer,AccountsAdmin,Admin,FellowshipLeader,InventoryOfficer")]
     public class ReimbursementsController : ControllerBase
     {
         private readonly IReimbursementService _reimbursementService;
@@ -44,7 +50,6 @@ namespace ChurchPortal.Controllers
         }
 
         /// <summary>Budget position and projection for a request. Optional ?amount= to preview a different approved amount.</summary>
-        [Authorize(Roles = "AccountsOfficer,AccountsAdmin")]
         [HttpGet("{id}/budget")]
         public async Task<IActionResult> Budget(Guid id, [FromQuery] decimal? amount = null)
         {
@@ -91,7 +96,6 @@ namespace ChurchPortal.Controllers
         // ---------------- Stage two: Accounts Officer ----------------
 
         /// <summary>Under Review -> Pending Approval.</summary>
-        [Authorize(Roles = "AccountsOfficer")]
         [HttpPost("{id}/review")]
         public async Task<IActionResult> Review(Guid id, [FromBody] ReviewReimbursementModel? model)
         {
@@ -101,7 +105,6 @@ namespace ChurchPortal.Controllers
         }
 
         /// <summary>Sends the request back to the member. Officer at Under Review, Admin at Pending Approval.</summary>
-        [Authorize(Roles = "AccountsOfficer,AccountsAdmin")]
         [HttpPost("{id}/return")]
         public async Task<IActionResult> Return(Guid id, [FromBody] RequestReimbursementInfoModel model)
         {
@@ -111,11 +114,9 @@ namespace ChurchPortal.Controllers
         }
 
         /// <summary>Older name for /return, kept so existing clients keep working.</summary>
-        [Authorize(Roles = "AccountsOfficer,AccountsAdmin")]
         [HttpPost("{id}/request-info")]
         public Task<IActionResult> RequestInfo(Guid id, [FromBody] RequestReimbursementInfoModel model) => Return(id, model);
 
-        [Authorize(Roles = "AccountsOfficer,AccountsAdmin")]
         [HttpPost("{id}/reject")]
         public async Task<IActionResult> Reject(Guid id, [FromBody] RejectReimbursementModel model)
         {
@@ -127,7 +128,6 @@ namespace ChurchPortal.Controllers
         // ---------------- Stage three: Accounts Admin ----------------
 
         /// <summary>Pending Approval -> Approved. Does not mark the request as paid.</summary>
-        [Authorize(Roles = "AccountsAdmin")]
         [HttpPost("{id}/approve")]
         public async Task<IActionResult> Approve(Guid id, [FromBody] ReimbursementDecisionModel model)
         {
@@ -137,11 +137,38 @@ namespace ChurchPortal.Controllers
         }
 
         /// <summary>Approved -> Paid. A separate, explicit confirmation after the money has been paid.</summary>
-        [Authorize(Roles = "AccountsAdmin")]
         [HttpPost("{id}/payment")]
         public async Task<IActionResult> RecordPayment(Guid id, [FromBody] RecordReimbursementPaymentModel model)
         {
             var result = await _reimbursementService.RecordPaymentAsync(id, model, CurrentUserId, CurrentRoles);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        // ---------------- Inventory Officer: physical items ----------------
+
+        /// <summary>Physical items to verify. ?all=true includes items already verified or rejected.</summary>
+        [HttpGet("verifications")]
+        public async Task<IActionResult> Verifications([FromQuery] bool all = false)
+        {
+            var result = await _reimbursementService.GetVerificationQueueAsync(!all, CurrentUserId, CurrentRoles);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        /// <summary>Confirms a physical item and creates its inventory record.</summary>
+        [HttpPost("items/{itemId}/verify")]
+        public async Task<IActionResult> VerifyItem(Guid itemId, [FromBody] VerifyReimbursementItemModel model)
+        {
+            var result = await _reimbursementService.VerifyItemAsync(itemId, model, CurrentUserId, CurrentRoles);
+            if (result.Status) return Ok(result);
+            return BadRequest(result);
+        }
+
+        [HttpPost("items/{itemId}/reject")]
+        public async Task<IActionResult> RejectItem(Guid itemId, [FromBody] RejectReimbursementItemModel model)
+        {
+            var result = await _reimbursementService.RejectItemAsync(itemId, model, CurrentUserId, CurrentRoles);
             if (result.Status) return Ok(result);
             return BadRequest(result);
         }

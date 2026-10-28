@@ -38,6 +38,34 @@ namespace ChurchPortal.Repositories.Implementattions
                 .ToListAsync();
         }
 
+        /// <summary>Requests that have at least one physical item, for the Inventory Officer.</summary>
+        public Task<List<ReimbursementRequest>> GetWithPhysicalItemsAsync(bool pendingOnly)
+        {
+            var query = _context.ReimbursementRequests
+                .AsNoTracking()
+                .Include(r => r.Items)
+                .Include(r => r.DepartmentRecord)
+                .AsSplitQuery()
+                .Where(r => !r.IsDeleted && r.Status != ReimbursementStatus.Draft);
+
+            query = pendingOnly
+                ? query.Where(r => r.Items.Any(i => !i.IsDeleted && i.VerificationStatus == InventoryVerificationStatus.Pending))
+                : query.Where(r => r.Items.Any(i => !i.IsDeleted && i.VerificationStatus != InventoryVerificationStatus.NotRequired));
+
+            return query.OrderBy(r => r.SubmittedDate).ToListAsync();
+        }
+
+        /// <summary>The request that owns a line item, tracked, with everything needed to change it.</summary>
+        public async Task<ReimbursementRequest?> GetByItemIdAsync(Guid itemId)
+        {
+            var requestId = await _context.ReimbursementItems
+                .Where(i => i.Id == itemId && !i.IsDeleted)
+                .Select(i => (Guid?)i.ReimbursementRequestId)
+                .FirstOrDefaultAsync();
+
+            return requestId == null ? null : await GetWithDetailsAsync(requestId.Value);
+        }
+
         public Task<ReimbursementReceipt?> GetReceiptAsync(Guid receiptId)
         {
             return _context.ReimbursementReceipts
